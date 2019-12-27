@@ -1,7 +1,7 @@
 '''
 @Author: meloming
 @Date: 2019-12-22 04:19:00
-@LastEditTime : 2019-12-25 01:16:15
+@LastEditTime : 2019-12-27 01:12:21
 @LastEditors  : Please set LastEditors
 @Description: Serilizers
 @FilePath: /ecust_annotation/api/serializer.py
@@ -41,7 +41,7 @@ class TemplateSerializer(serializers.HyperlinkedModelSerializer):
 class TemplateDeatilSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
-        fields = ['id','name','template_type','create_date']
+        fields = ['id','name','template_type','create_date','in_use']
 
 '''
 @description: 实体组的Serializer
@@ -104,3 +104,39 @@ class RelationEntityTemplatelSerializer(serializers.ModelSerializer):
         model = Relation_entity_template
         fields = ['id','relation','start_entity','end_entity']
 
+'''
+@description: Project的serializer
+@param {type} 
+@return: 
+'''
+class ProjectSerializer(serializers.HyperlinkedModelSerializer):
+    url = serializers.HyperlinkedIdentityField(view_name='api:project-detail',lookup_field='id',lookup_url_kwarg='projectid')
+    template = serializers.HyperlinkedRelatedField(view_name='api:template-detail',lookup_field='pk',lookup_url_kwarg='pk',queryset=Template.objects.all())
+    class Meta:
+        model = Project
+        fields = ['id','name','project_type','template','ann_model','ann_num_per_epoch','url']
+
+'''
+@description: 任务详情的serializer，查看某一任务详情，以及更新某一任务in_use时使用
+@param {type} 
+@return: 
+'''
+class PorjectDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = ['id','name','project_type','template','ann_model','ann_num_per_epoch','in_use']
+
+'''
+@description: 文本表的Serializer
+@param {type} 
+@return: 
+'''
+class DocSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Doc
+        fields = ['id','content','epoch','project']
+
+class DicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Dic
+        fields = ['id','project','content','create_date','content','entity_template']

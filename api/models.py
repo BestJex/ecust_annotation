@@ -19,6 +19,7 @@ class Template(models.Model):
     name = models.CharField(max_length=20,unique=True)
     template_type = models.CharField(max_length=15,choices=TYPE_CHOICES)
     create_date = models.DateTimeField(auto_now_add=True)
+    in_use = models.IntegerField(default=0,null=True)
 
 class Classification_template(models.Model):
     color = models.CharField(max_length=7)
@@ -76,6 +77,7 @@ class Ann_Model(models.Model):
     api = models.URLField()
     args = models.TextField()
 
+
 class Project(models.Model):
     ACTIVE_LAERNING = 'ACTIVE_LEARNING'
     NON_ACTIVE_LEARNING = 'NON_ACTIVE_LEARNING'
@@ -90,8 +92,10 @@ class Project(models.Model):
     name = models.CharField(max_length=20,unique=True)
     project_type = models.CharField(choices=PROJECT_TYPE_CHOICES,max_length=20)
     create_date = models.DateTimeField(auto_now_add=True)
-    template = models.ForeignKey(Template,related_name='project',on_delete=models.CASCADE)
-    ann_model = models.ForeignKey(Ann_Model,related_name='project',on_delete=models.CASCADE)
+    template = models.ForeignKey(Template,related_name='project',on_delete=models.PROTECT)
+    ann_model = models.ForeignKey(Ann_Model,related_name='project',on_delete=models.PROTECT,null=True)
+    in_use = models.IntegerField(default=0,null=True)
+    ann_num_per_epoch = models.IntegerField(null=True)
 
 class Epoch(models.Model):
     UNDO = 'UNDO'
@@ -113,9 +117,9 @@ class Epoch(models.Model):
     num = models.IntegerField()
     state = models.CharField(max_length=15,choices=STATE_CHOICES,default='UNDO')
     re_annotate_num = models.IntegerField()
-    annotator = models.ForeignKey(User,related_name='annotator_epoch',on_delete='models.CASECADE')
-    reviewer =  models.ForeignKey(User,related_name='reviewer_epoch',on_delete='models.CASECADE')
-    project = models.ForeignKey(Project,related_name='epoch',on_delete='models.CASECADE')
+    annotator = models.ForeignKey(User,related_name='annotator_epoch',on_delete=models.PROTECT)
+    reviewer =  models.ForeignKey(User,related_name='reviewer_epoch',on_delete=models.PROTECT)
+    project = models.ForeignKey(Project,related_name='epoch',on_delete=models.CASCADE)
 
     class Meta:
         unique_together = ['num', 'project']
@@ -123,12 +127,13 @@ class Epoch(models.Model):
 class Doc(models.Model):
     content = models.TextField()
     epoch = models.ForeignKey(Epoch, related_name='doc', on_delete=models.CASCADE,null=True)
+    project = models.ForeignKey(Project,related_name='doc',on_delete=models.CASCADE)
 
 class Dic(models.Model):
     project = models.ForeignKey(Project,related_name='dic',on_delete=models.CASCADE)
     create_date = models.DateTimeField(auto_now_add=True)
     content = models.CharField(max_length=100)
-    entity_template = models.ForeignKey(Entity_template,related_name='dic',on_delete=models.CASCADE)
+    entity_template = models.ForeignKey(Entity_template,related_name='dic',on_delete=models.PROTECT)
 
 class Annotate_allocation(models.Model):
     UNDO = 'UNDO'
@@ -144,9 +149,10 @@ class Annotate_allocation(models.Model):
     )
 
     doc = models.ForeignKey(Doc,related_name='annotate_allocation',on_delete=models.CASCADE)
-    annotator = models.ForeignKey(User,related_name='annotate_allocation',on_delete=models.CASCADE)
+    annotator = models.ForeignKey(User,related_name='annotate_allocation',on_delete=models.PROTECT)
     create_date = models.DateTimeField(auto_now_add=True)
     state = models.CharField(max_length=15,choices=STATE_CHOICES,default='UNDO')
+    
 
     class Meta:
         unique_together = ['doc', 'annotator']
@@ -161,7 +167,7 @@ class Review_allocation(models.Model):
     )
 
     doc = models.ForeignKey(Doc,related_name='review_allocation',on_delete=models.CASCADE)
-    reviewer = models.ForeignKey(User,related_name='review_allocation',on_delete=models.CASCADE)
+    reviewer = models.ForeignKey(User,related_name='review_allocation',on_delete=models.PROTECT)
     create_date = models.DateTimeField(auto_now_add=True)
     state = models.CharField(max_length=15,choices=STATE_CHOICES,default='UNDO')
 
@@ -185,18 +191,18 @@ class Role(models.Model):
 
 class Classification_annotation(models.Model):
     doc = models.ForeignKey(Doc,related_name='classification_annotation',on_delete=models.CASCADE)
-    user = models.ForeignKey(User,related_name='classification_annotation',on_delete=models.CASCADE)
-    role = models.ForeignKey(Role,related_name='classification_annotation',on_delete=models.CASCADE)
-    classification_template = models.ForeignKey(Classification_template,related_name='classification_annotation',on_delete=models.CASCADE)
+    user = models.ForeignKey(User,related_name='classification_annotation',on_delete=models.PROTECT)
+    role = models.ForeignKey(Role,related_name='classification_annotation',on_delete=models.PROTECT)
+    classification_template = models.ForeignKey(Classification_template,related_name='classification_annotation',on_delete=models.PROTECT)
     name = models.CharField(max_length=30)
     create_date = models.DateTimeField(auto_now_add=True)
 
 
 class Event_group_annotation(models.Model):
-    event_group_template = models.ForeignKey(Event_group_template,related_name='event_group_annotation',on_delete=models.CASCADE)
+    event_group_template = models.ForeignKey(Event_group_template,related_name='event_group_annotation',on_delete=models.PROTECT)
     doc = models.ForeignKey(Doc,related_name='event_group_anontation',on_delete=models.CASCADE)
-    user = models.ForeignKey(User,related_name='event_group_anontation',on_delete=models.CASCADE)
-    role = models.ForeignKey(Role,related_name='event_group_anontation',on_delete=models.CASCADE)
+    user = models.ForeignKey(User,related_name='event_group_anontation',on_delete=models.PROTECT)
+    role = models.ForeignKey(Role,related_name='event_group_anontation',on_delete=models.PROTECT)
     create_date = models.DateTimeField(auto_now_add=True)
 
 class Entity_annotation(models.Model):
@@ -204,18 +210,18 @@ class Entity_annotation(models.Model):
     start_offset = models.IntegerField()
     end_offset = models.IntegerField()
     content = models.CharField(max_length=100)
-    entity_template = models.ForeignKey(Entity_template,related_name='entity_annotation',on_delete=models.CASCADE)
-    user = models.ForeignKey(User,related_name='entity_annotation',on_delete=models.CASCADE)
-    role = models.ForeignKey(Role,related_name='entity_annotation',on_delete=models.CASCADE)
+    entity_template = models.ForeignKey(Entity_template,related_name='entity_annotation',on_delete=models.PROTECT)
+    user = models.ForeignKey(User,related_name='entity_annotation',on_delete=models.PROTECT)
+    role = models.ForeignKey(Role,related_name='entity_annotation',on_delete=models.PROTECT)
     event_group_annotation = models.ForeignKey(Event_group_annotation,related_name='entity_annotation',on_delete=models.CASCADE)
     create_date = models.DateTimeField(auto_now_add=True)
 
 class Relation_annotation(models.Model):
     doc = models.ForeignKey(Doc,related_name='relation_annotation',on_delete=models.CASCADE)
-    user = models.ForeignKey(User,related_name='relation_annotation',on_delete=models.CASCADE)
-    role = models.ForeignKey(Role,related_name='relation_annotation',on_delete=models.CASCADE)
+    user = models.ForeignKey(User,related_name='relation_annotation',on_delete=models.PROTECT)
+    role = models.ForeignKey(Role,related_name='relation_annotation',on_delete=models.PROTECT)
     create_date = models.DateTimeField(auto_now_add=True)
-    relation_entity_template = models.ForeignKey(Relation_entity_template,name='relation_annotation',on_delete=models.CASCADE)
+    relation_entity_template = models.ForeignKey(Relation_entity_template,name='relation_annotation',on_delete=models.PROTECT)
     start_entity = models.ForeignKey(Entity_annotation,related_name='start_entity_relation_annotation',on_delete=models.CASCADE)
     end_entity = models.ForeignKey(Entity_annotation,related_name='end_entity_relation_annotation',on_delete=models.CASCADE)
     

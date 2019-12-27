@@ -1,7 +1,7 @@
 '''
 @Author: your name
 @Date: 2019-12-22 04:32:38
-@LastEditTime : 2019-12-25 23:00:33
+@LastEditTime : 2019-12-27 01:09:06
 @LastEditors  : Please set LastEditors
 @Description: In User Settings Edit
 @FilePath: /ecust_annotation/api/views.py
@@ -12,7 +12,10 @@ from api.models import Template
 from api.serializer import *
 from rest_framework import status
 from rest_framework.response import Response
-
+from rest_framework.parsers import MultiPartParser
+from rest_framework.views import APIView
+from api import utils
+from django.db import transaction
 
 '''
 @description: 模板类型对应Serializer字典
@@ -57,19 +60,18 @@ TemplateClassTemplateTypeDic['classifications'] = ['CLASSIFICATION']
 '''
 # Create your views here.
 class TemplateList(generics.ListCreateAPIView):
-    queryset = Template.objects.all()
+    #只筛选in_use=1的template
+    queryset = Template.objects.filter(in_use=1)
     serializer_class = TemplateSerializer
 
 '''
-@description: 查询模板详情
+@description: 查询模板详情,更新模板的in_use
 @param {type} 
 @return: 返回模板详细信息
 '''
-class TemplateDetail(generics.RetrieveAPIView):
+class TemplateDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Template.objects.all()
     serializer_class = TemplateDeatilSerializer
-
-
 
 '''
 @description:  对模板内部的组件进行创建和查询，包括实体组、关系、事件组和分类标签
@@ -130,13 +132,11 @@ class TemplateClassList(generics.ListCreateAPIView):
             try:
                 template_type = Template.objects.get(pk=template_id).template_type
             except:
-                content = {'type':'error','message':'there is no template with pk = {}'.format(template_id)}
-                return Response(content,status=status.HTTP_400_BAD_REQUEST)
+                return utils.return_Response('errors','there is no template with pk = {}'.format(template_id),status.HTTP_400_BAD_REQUEST)
 
             #再验证template_type和templateclass是否能够对应
             if template_type not in TemplateClassTemplateTypeDic[template_class]:
-                content = {'type':'error','message':'this assembly is not supported by the template'}
-                return Response(content,status=status.HTTP_400_BAD_REQUEST)
+                return utils.return_Response('errors','this assembly is not supported by the template',status.HTTP_400_BAD_REQUEST)
 
             #如果验证没有问题，data_item中添加template信息
             data_item['template'] = template_id
@@ -256,15 +256,94 @@ class RelationEntityList(generics.ListCreateAPIView):
             template_type = self.get_template_type_by_entity(entity)
             #如果实体所属模板不是RE，返回错误
             if template_type != 'RE':
-                content = {'type':'error','message':'could not add a relation on entity with pk={}, which is not an entity of relation template'.format(id)}
-                return Response(content,status=status.HTTP_400_BAD_REQUEST)  
+                return utils.return_Response('errors','could not add a relation on entity with pk={}, \
+                                            which is not an entity of relation template'.format(id), \
+                                            status.HTTP_400_BAD_REQUEST)
             return entity 
         except:
             content = {'type':'error','message':'there is no entity_template with pk = {}'.format(id)}
-            return Response(content,status=status.HTTP_400_BAD_REQUEST)        
+            return Response(content,status=status.HTTP_400_BAD_REQUEST)  
+            return utils.return_Response('errors','there is no entity_template with pk = {}'.format(id),status.HTTP_400_BAD_REQUEST)      
 
     #输入一个entitytemplate实例，返回这个entity所属的template的type
     def get_template_type_by_entity(self,entity):
         if entity.event_group_template is None:
             return entity.entity_group_template.template.template_type
         return entity.event_group_template.template.template_type        
+
+
+'''
+@description: 任务的总览接口
+@param {type} 
+@return: 
+'''
+class ProjectList(generics.ListCreateAPIView):
+    queryset = Project.objects.filter(in_use=1)
+    serializer_class = ProjectSerializer
+
+'''
+@description: 查询任务详情，更新某一任务的in_use
+@param {type} 
+@return: 
+'''
+class ProjectDetail(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Project.objects.all()
+    serializer_class = PorjectDetailSerializer
+    lookup_url_kwarg = 'projectid'
+
+
+'''
+@description: 负责上传文本，且更新ann_num_per_epoch信息
+@param {type} 
+@return: 
+'''
+class ProjectDoc(APIView):
+    def post(self,request,*args, **kwargs):
+        project_id = self.kwargs['projectid']
+        #查看project是否存在
+        try:
+            project = Project.objects.filter(pk=project_id)
+        except:
+            content = {'error':'project not found!'}
+            return Response(content,status=status.HTTP_404_NOT_FOUND)
+
+        ann_num_per_epoch = request.data['ann_num_per_epoch']
+        #验证文件格式的准确性，以及ann_num_per_epoch的合法性
+        docs = utils.validate_files(request.FILES,ann_num_per_epoch)
+
+        if isinstance(docs,Response):
+            return docs
+        
+        #如果没有问题，serialize docs
+        serialize_doc_data = utils.serialize_doc(docs,project_id)
+        serializer = DocSerializer(data=serialize_doc_data,many=True)
+        serializer.is_valid()
+        
+        try:
+            #加一个事务，doc表和project保持原子性
+            with transaction.atomic():
+                serializer.save()
+                #同时更新project的ann_num_per_epoch
+                project.update(ann_num_per_epoch=ann_num_per_epoch)
+        except Exception as e:
+            return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
+        return utils.return_Response('message','create successfully!',status.HTTP_201_CREATED)
+        
+        
+class ProjectDic(APIView):
+    def post(self,request,*args, **kwargs):
+        project_id = self.kwargs['projectid']
+
+        #对于上传的dic文件做验证，如果成功返回serialize好的data，如果出错返回Respone类型
+        serialized_dic_data = utils.validate_dic(request.FILES['file'],project_id)
+        if isinstance(serialized_dic_data,Response):
+            return serialized_dic_data
+
+        serializer = DicSerializer(data=serialized_dic_data,many=True)
+        serializer.is_valid()
+        serializer.save()
+
+        return utils.return_Response('message','create successfully!',status.HTTP_201_CREATED)
+        
+        
+        
