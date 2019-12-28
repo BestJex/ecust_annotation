@@ -121,8 +121,6 @@ class Epoch(models.Model):
     reviewer =  models.ForeignKey(User,related_name='reviewer_epoch',on_delete=models.PROTECT)
     project = models.ForeignKey(Project,related_name='epoch',on_delete=models.CASCADE)
 
-    class Meta:
-        unique_together = ['num', 'project']
 
 class Doc(models.Model):
     content = models.TextField()

@@ -1,7 +1,7 @@
 '''
 @Author: liangming
 @Date: 2019-12-26 08:28:23
-@LastEditTime : 2019-12-27 01:29:45
+@LastEditTime : 2019-12-28 08:37:20
 @LastEditors  : Please set LastEditors
 @Description: 各种工具方法
 @FilePath: /ecust_annotation/api/utils.py
@@ -12,6 +12,8 @@ from rest_framework import status
 from api.models import *
 from api import dao
 from django.shortcuts import get_object_or_404
+import math
+import random
 
 '''
 @description: 验证上传文件是否符合要求，读取所有的文件，并保存在一个list中返回
@@ -25,7 +27,7 @@ def validate_files(files,ann_num_per_epoch):
         #迭代文件中的每一行
         for line in f:
             #如果不为utf-8则跳过改行
-            if chardet.detect(line)['encoding'] != 'utf-8':
+            if chardet.detect(line)['encoding'] not in ['utf-8','ascii']:
                 continue 
             doc_line = line.decode('utf-8').strip().replace('\r','').replace('\n','')
             #如果该行为空
@@ -113,3 +115,85 @@ def has_entity_template_by_entity_name(query_set,name):
             return item
     return None
         
+
+'''
+@description: 得到epoch的serializer的data
+@param {type} 
+@return: 
+'''
+def get_epoch_serializer_data(project,annotators,reviewers):
+    serialize_data = []
+    #得到project的type
+    project_type = project.project_type
+
+    ann_num_per_epoch = project.ann_num_per_epoch
+    docs_num = dao.get_doc_num_by_project(project)
+
+    total_epoches = math.ceil(docs_num/ann_num_per_epoch)
+
+    #每个epoch分配所有的标注者，选择一个审核者
+    for epoch_num in range(total_epoches):
+        for annotator in annotators:
+            data = {}
+            data['num'] = epoch_num + 1
+            data['re_annotate_num'] = 0
+            data['project'] = project.id
+            data['reviewer'] = reviewers[epoch_num%len(reviewers)].id
+            data['annotator'] = annotator.id
+            serialize_data.append(data)
+            print(data,'\n')
+    return serialize_data,total_epoches
+
+'''
+@description: 分配ann_allocation和review_allocation
+@param {type} 
+@return: 
+'''
+def get_annotation_review_allocation(project,total_allocate_epoch,annotators,reviewers):
+    for epoch_num in range(total_allocate_epoch):
+        #获得该epoch_num的所有epoch（每个annotator一个）
+        epoches = dao.get_epoch_by_num_and_project(epoch_num+1,project)
+
+        #获取待分配的doc，其中地雷任务会返回全部
+        docs = get_random_unallocated_docs_by_project(project)
+
+        #对每一条文本进行分配,每一个doc分配两个annotator一个reviewer
+        #即每个doc分配和两个epoch做分配
+        for doc_index in range(2*len(docs)):
+            doc = docs[doc_index//2]
+            epoch = epoches[doc_index%len(epoches)]
+
+            #更新doc的epoch
+            dao.update_doc_epoch(doc,epoch)
+
+            #创建annotation_allocation
+            dao.create_annotation_allocation(doc,epoch)
+
+            #每一个doc两个annotator一个reviewer
+            if doc_index%2 == 0:
+                dao.create_review_allocation(doc,epoch)
+            
+
+
+'''
+@description: 根据任务，随机选择一个epoch数量的doc
+@param {type} 
+@return: 
+'''
+def get_random_unallocated_docs_by_project(project):
+    docs = dao.get_unallocated_docs_by_project(project)
+    ann_num_per_epoch = project.ann_num_per_epoch
+
+    #如果剩余数量比ann_num_per_epoch小，直接返回（地雷任务会直接返回全部）
+    if len(docs) <= ann_num_per_epoch:
+        #这里返回的是queryset
+        return docs
+
+    index_list = range(len(docs))
+    random_index = random.sample(index_list, ann_num_per_epoch) 
+
+    random_docs = [docs[i] for i in random_index]
+
+    #懒得组装成queryset，这里就是list返回
+    return random_docs
+

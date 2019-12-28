@@ -1,7 +1,7 @@
 '''
 @Author: your name
 @Date: 2019-12-22 04:32:38
-@LastEditTime : 2019-12-27 01:09:06
+@LastEditTime : 2019-12-28 08:20:09
 @LastEditors  : Please set LastEditors
 @Description: In User Settings Edit
 @FilePath: /ecust_annotation/api/views.py
@@ -16,6 +16,8 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.views import APIView
 from api import utils
 from django.db import transaction
+from django.shortcuts import get_object_or_404
+from api import dao
 
 '''
 @description: 模板类型对应Serializer字典
@@ -261,8 +263,6 @@ class RelationEntityList(generics.ListCreateAPIView):
                                             status.HTTP_400_BAD_REQUEST)
             return entity 
         except:
-            content = {'type':'error','message':'there is no entity_template with pk = {}'.format(id)}
-            return Response(content,status=status.HTTP_400_BAD_REQUEST)  
             return utils.return_Response('errors','there is no entity_template with pk = {}'.format(id),status.HTTP_400_BAD_REQUEST)      
 
     #输入一个entitytemplate实例，返回这个entity所属的template的type
@@ -304,8 +304,7 @@ class ProjectDoc(APIView):
         try:
             project = Project.objects.filter(pk=project_id)
         except:
-            content = {'error':'project not found!'}
-            return Response(content,status=status.HTTP_404_NOT_FOUND)
+            return utils.return_Response('errors','project not found',status.HTTP_404_NOT_FOUND)
 
         ann_num_per_epoch = request.data['ann_num_per_epoch']
         #验证文件格式的准确性，以及ann_num_per_epoch的合法性
@@ -329,7 +328,11 @@ class ProjectDoc(APIView):
             return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
         return utils.return_Response('message','create successfully!',status.HTTP_201_CREATED)
         
-        
+'''
+@description: 负责上传字典信息，不符合规范的会报错
+@param {type} 
+@return: 
+'''       
 class ProjectDic(APIView):
     def post(self,request,*args, **kwargs):
         project_id = self.kwargs['projectid']
@@ -345,5 +348,43 @@ class ProjectDic(APIView):
 
         return utils.return_Response('message','create successfully!',status.HTTP_201_CREATED)
         
+class ProjectEpoch(APIView):
+    #post请求用于确定epoch的分配和ann_allocation以及review_allocation的创建
+    def post(self,request,*args, **kwargs):
+        #epoch表的分配
+        project_id = self.kwargs['projectid']
+        annotators_id = request.data['annotators']
+        reviewers_id = request.data['reviewers']
+
+        validate_data = self.validate(project_id,annotators_id,reviewers_id)
+        if isinstance(validate_data,Response):
+            return validate_data
+        project,annotators,reviewers = validate_data[0],validate_data[1],validate_data[2]
+
+        #创建epoch表
+        serialize_data,total_epoches = utils.get_epoch_serializer_data(project,annotators,reviewers)
+        serializer = EpochSerializer(data=serialize_data,many=True)
+        serializer.is_valid()
+        serializer.save()
+
+        #如果是主动学习，待分配的epoch数为1，其他为total_epoches
+        total_allocate_epoch = 1 if project.project_type == 'ACTIVE_LEARNING' else total_epoches
+       
+        #ann_allocation的分配,review_allocation的分配
+        utils.get_annotation_review_allocation(project,total_allocate_epoch,annotators,reviewers)
+
+        return Response(status.HTTP_200_OK)        
         
-        
+
+    def validate(self,project_id,annotators_id,reviewers_id):
+        #数据有效性做验证
+        project = get_object_or_404(Project,pk=project_id)
+        if isinstance(project,Response):
+            return project
+
+        annotators = User.objects.filter(pk__in=annotators_id)
+        reviewers = User.objects.filter(pk__in=reviewers_id)
+        if len(annotators) != len(annotators_id) or len(reviewers) != len(reviewers_id):
+            return utils.return_Response('errors','has invalid user id',status.HTTP_404_NOT_FOUND)
+
+        return [project,annotators,reviewers]

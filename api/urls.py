@@ -1,7 +1,7 @@
 '''
 @Author: your name
 @Date: 2019-12-22 04:13:58
-@LastEditTime : 2019-12-27 00:08:29
+@LastEditTime : 2019-12-27 05:59:02
 @LastEditors  : Please set LastEditors
 @Description: In User Settings Edit
 @FilePath: /ecust_annotation/api/urls.py
@@ -23,5 +23,6 @@ urlpatterns = [
     path('projects/',ProjectList.as_view(),name='projects'),
     path('projects/<int:projectid>/',ProjectDetail.as_view(),name='project-detail'),  
     path('projects/<int:projectid>/docs/',ProjectDoc.as_view(),name='project-doc'),
-    path('projects/<int:projectid>/dics/',ProjectDic.as_view(),name='project-dic')   
+    path('projects/<int:projectid>/dics/',ProjectDic.as_view(),name='project-dic'),
+    path('projects/<int:projectid>/epoches/',ProjectEpoch.as_view(),name='project-epoch'),
 ]

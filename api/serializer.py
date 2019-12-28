@@ -1,7 +1,7 @@
 '''
 @Author: meloming
 @Date: 2019-12-22 04:19:00
-@LastEditTime : 2019-12-27 01:12:21
+@LastEditTime : 2019-12-28 06:53:51
 @LastEditors  : Please set LastEditors
 @Description: Serilizers
 @FilePath: /ecust_annotation/api/serializer.py
@@ -136,7 +136,17 @@ class DocSerializer(serializers.ModelSerializer):
         model = Doc
         fields = ['id','content','epoch','project']
 
+'''
+@description: 字典表的serializer
+@param {type} 
+@return: 
+'''
 class DicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dic
         fields = ['id','project','content','create_date','content','entity_template']
+
+class EpochSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Epoch
+        fields = ['id','num','state','re_annotate_num','annotator','reviewer','project']
