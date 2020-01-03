@@ -124,7 +124,7 @@ class Epoch(models.Model):
 
 class Doc(models.Model):
     content = models.TextField()
-    epoch = models.ForeignKey(Epoch, related_name='doc', on_delete=models.CASCADE,null=True)
+    epoch = models.ManyToManyField(Epoch, related_name='doc')
     project = models.ForeignKey(Project,related_name='doc',on_delete=models.CASCADE)
 
 class Dic(models.Model):
@@ -192,7 +192,6 @@ class Classification_annotation(models.Model):
     user = models.ForeignKey(User,related_name='classification_annotation',on_delete=models.PROTECT)
     role = models.ForeignKey(Role,related_name='classification_annotation',on_delete=models.PROTECT)
     classification_template = models.ForeignKey(Classification_template,related_name='classification_annotation',on_delete=models.PROTECT)
-    name = models.CharField(max_length=30)
     create_date = models.DateTimeField(auto_now_add=True)
 
 
@@ -211,7 +210,7 @@ class Entity_annotation(models.Model):
     entity_template = models.ForeignKey(Entity_template,related_name='entity_annotation',on_delete=models.PROTECT)
     user = models.ForeignKey(User,related_name='entity_annotation',on_delete=models.PROTECT)
     role = models.ForeignKey(Role,related_name='entity_annotation',on_delete=models.PROTECT)
-    event_group_annotation = models.ForeignKey(Event_group_annotation,related_name='entity_annotation',on_delete=models.CASCADE)
+    event_group_annotation = models.ForeignKey(Event_group_annotation,related_name='entity_annotation',on_delete=models.CASCADE,null=True)
     create_date = models.DateTimeField(auto_now_add=True)
 
 class Relation_annotation(models.Model):
@@ -219,7 +218,6 @@ class Relation_annotation(models.Model):
     user = models.ForeignKey(User,related_name='relation_annotation',on_delete=models.PROTECT)
     role = models.ForeignKey(Role,related_name='relation_annotation',on_delete=models.PROTECT)
     create_date = models.DateTimeField(auto_now_add=True)
-    relation_entity_template = models.ForeignKey(Relation_entity_template,name='relation_annotation',on_delete=models.PROTECT)
     start_entity = models.ForeignKey(Entity_annotation,related_name='start_entity_relation_annotation',on_delete=models.CASCADE)
     end_entity = models.ForeignKey(Entity_annotation,related_name='end_entity_relation_annotation',on_delete=models.CASCADE)
-    
+    relation_entity_template = models.ForeignKey(Relation_entity_template,related_name='relation_annotation',on_delete=models.PROTECT)

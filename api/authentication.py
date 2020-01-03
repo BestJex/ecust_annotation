@@ -1,7 +1,7 @@
 '''
 @Author: meloming
 @Date: 2019-12-22 04:04:59
-@LastEditTime : 2019-12-22 04:26:43
+@LastEditTime : 2020-01-03 03:04:22
 @LastEditors  : Please set LastEditors
 @Description: used for authentication
 @FilePath: /ecust_annotation/api/authentication.py
@@ -10,7 +10,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from api.serializer import RoleSerializer
-
+from api import utils
 
 '''
 @description: to return custom token when the request has been authorized
@@ -42,10 +42,10 @@ class CustomAuthToken(ObtainAuthToken):
 
         #serialize role list of a user
         role_serializer = RoleSerializer(user.role,many=True)
-        role_list = role_serializer.data
+        role_list = utils.serialize_user_role(role_serializer.data)
         
         return Response({
             'user_id': user.pk,
             'token': token.key,
-            'user_role': role_list
+            'roles': role_list
         })

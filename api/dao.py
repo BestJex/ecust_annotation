@@ -1,12 +1,13 @@
 '''
 @Author: liangming
 @Date: 2019-12-27 00:27:40
-@LastEditTime : 2019-12-28 08:38:33
+@LastEditTime : 2020-01-03 06:46:42
 @LastEditors  : Please set LastEditors
 @Description: 复杂查询接口
 @FilePath: /ecust_annotation/api/dao.py
 '''
 from api.models import *
+from django.db.models.query import QuerySet
 
 '''
 @description: 根据project得到对应template的entity_template
@@ -54,8 +55,7 @@ def get_unallocated_docs_by_project(project):
 @return: 
 '''
 def update_doc_epoch(doc,epoch):
-     doc.epoch = epoch
-     doc.save()
+     doc.epoch.add(epoch)
 
 '''
 @description:  分配annotation的allocation
@@ -75,3 +75,225 @@ def create_annotation_allocation(doc,epoch):
 def create_review_allocation(doc,epoch):
     review_allocation = Review_allocation(doc=doc,reviewer=epoch.reviewer)
     review_allocation.save()
+
+'''
+@description: 查询这个epoch下的ann_allocation对象
+@param {type} 
+@return: 
+'''
+def get_ann_allocation_by_epoch(epoch):
+    epoch_docs = epoch.doc.all()
+    return Annotate_allocation.objects.filter(annotator=epoch.annotator).filter(doc__in=epoch_docs)
+
+'''
+@description: 查询这个epoch下的revew_allocation对象
+@param {type} 
+@return: 
+'''
+def get_review_allocation_by_epoch(epoch):
+    epoch_docs = epoch.doc.all()
+    return Review_allocation.objects.filter(reviewer=epoch.reviewer).filter(doc__in=epoch_docs)
+
+'''
+@description: 查询project的所有epoch
+@param {type} 
+@return: 
+'''
+def get_epoch_by_project(project):
+    return project.epoch
+
+'''
+@description: 查询annotator的所有epoch,排除undo状态的
+@param {type} 
+@return: 
+'''
+def get_epoch_by_annotator(annotator):
+    return Epoch.objects.filter(annotator=annotator).exclude(state='UNDO')
+
+'''
+@description: 查询reviewer处于reviewing和finish的epoch
+@param {type} 
+@return: 
+'''
+def get_epoch_by_reviewer(reviewer):
+    return Epoch.objects.filter(reviewer=reviewer).filter(state__in=['REVIEWING','FINISH'])
+
+'''
+@description: 根据doc返回annotation的type
+@param {type} 
+@return: 
+'''
+def get_annotation_type_by_doc(doc):
+    return doc.project.template.template_type
+
+'''
+@description: 根据doc和user返回entity_annotation结果
+@param {type} 
+@return: 
+'''
+def get_entity_annotation_by_doc(doc,user,role):
+    return Entity_annotation.objects.filter(doc=doc).filter(user=user).filter(role=role)
+
+'''
+@description: 根据doc user和role返回relation_entity_annotation的结果
+@param {type} 
+@return: 
+'''
+def get_relation_annotation_by_doc(doc,user,role):
+    return Relation_annotation.objects.filter(doc=doc).filter(user=user).filter(role=role)
+
+'''
+@description: 根据doc user role返回classification的结果
+@param {type} 
+@return: 
+'''
+def get_classification_by_doc(doc,user,role):
+    return Classification_annotation.objects.filter(doc=doc).filter(user=user).filter(role=role)
+
+'''
+@description: 根据doc user role返回event结果
+@param {type} 
+@return: 
+'''
+def get_event_annotation_by_doc(doc,user,role):
+    return Event_group_annotation.objects.filter(doc=doc).filter(user=user).filter(role=role)
+
+'''
+@description: 更新annotation_allocation的状态
+@param {type} 
+@return: 
+'''
+def update_annotation_allocation_state(annotate_allocation,state):
+    if isinstance(annotate_allocation,QuerySet):
+        for item in annotate_allocation:
+            item.state = state
+            item.save()
+    else:
+        annotate_allocation.state = state
+        annotate_allocation.save()
+
+'''
+@description: 获取该user在该doc下的annotation_allocation
+@param {type} 
+@return: 
+'''
+def get_annotation_allocation_by_doc_user(doc,user):
+    ann_allocation = Annotate_allocation.objects.filter(doc=doc).filter(annotator=user)
+    return ann_allocation
+
+
+'''
+@description: 查询该doc、该user该role下的epoch
+@param {type} 
+@return: 
+'''
+def get_epoch_of_annotator_by_doc(doc,user,role):
+    #首先找到该doc和user对应的epoch
+    if role.name == 'annotator':
+        epoch = doc.epoch.all().filter(annotator=user)[0]
+    else:
+        epoch = doc.epoch.all().filter(reviewer=user)
+    return epoch
+
+'''
+@description: 更新epoch的状态，可能是一组epoch
+@param {type} 
+@return: 
+'''
+def update_epoch_state(epoch,state):
+    if not isinstance(epoch,QuerySet):
+        epoch.state = state
+        epoch.save()
+    else:
+        for item in epoch:
+            item.state = state
+            item.save()        
+
+'''
+@description: 查询该doc所在epoch_num的epoch
+@param {type} 
+@return: 
+'''
+def get_epoch_by_doc(doc):
+    doc_epoch = doc.epoch.all()[0]
+    project = doc_epoch.project
+    epoch_num = doc_epoch.num
+    return Epoch.objects.filter(project=project).filter(num=epoch_num)
+
+'''
+@description: 得到该doc对应Epoch中处于waiting状态的epoch
+@param {type} 
+@return: 
+'''
+def get_waiting_epoch(doc):
+    return doc.epoch.all().filter(state='WAITING')
+
+'''
+@description: 查询doc的project
+@param {type} 
+@return: 
+'''
+def get_project_by_doc(doc):
+    return doc.project
+
+'''
+@description: 判断该doc所属的epoch是否为该project的最后一个epoch
+@param {type} 
+@return: 
+'''
+def is_last_epoch(project,doc):
+    epoch_num = doc.epoch.all()[0].num
+    total_epoch_num = get_total_epoch_num_by_project(project)
+    return True if epoch_num == total_epoch_num else False
+
+'''
+@description: 查询project的总epoch数
+@param {type} 
+@return: 
+'''
+def get_total_epoch_num_by_project(project):
+    return Epoch.objects.filter(project=project).order_by('-num')[0].num
+
+'''
+@description: 输入project的epoch_num下的所有epoch，返回该epoch_num下所有分配的doc
+@param {type} 
+@return: 
+'''
+def get_doc_by_epoch(epoches):
+    if isinstance(epoches,QuerySet):
+        return Doc.objects.filter(epoch__in=epoches).distinct()
+    else:
+        return Doc.objects.filter(epoch=epoches)
+
+'''
+@description: 输入doc查询两个标注者对其的标注结果
+@param {type} 
+@return: 
+'''
+def get_annotation_of_doc(doc):
+    #查询该doc对应的两个epoch，对应两个annotator
+    doc_epoch = doc.epoch.all()
+    annotator_one = doc_epoch[0].annotator
+    annotator_two = doc_epoch[1].annotator
+
+    #查询annotator_one的标注结果
+    annotation_one = Entity_annotation.objects.filter(doc=doc).filter(user=annotator_one)
+    annotation_two = Entity_annotation.objects.filter(doc=doc).filter(user=annotator_two)
+    return annotation_one,annotation_two
+
+'''
+@description: 查询该doc所对应的epoch
+@param {type} 
+@return: 
+'''
+def get_doc_epoch(doc):
+    return doc.epoch.all()
+
+
+'''
+@description: 更新epoch的re_annotate_num
+@param {type} 
+@return: 
+'''
+def update_epoch_re_annotate_num(epoch,re_annotate_num):
+    epoch.re_annotate_num = re_annotate_num

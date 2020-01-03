@@ -1,13 +1,14 @@
 '''
 @Author: meloming
 @Date: 2019-12-22 04:19:00
-@LastEditTime : 2019-12-28 06:53:51
+@LastEditTime : 2020-01-03 02:16:36
 @LastEditors  : Please set LastEditors
 @Description: Serilizers
 @FilePath: /ecust_annotation/api/serializer.py
 '''
 from rest_framework import serializers
 from api.models import *
+from api import dao
 
 
 '''
@@ -134,7 +135,7 @@ class PorjectDetailSerializer(serializers.ModelSerializer):
 class DocSerializer(serializers.ModelSerializer):
     class Meta:
         model = Doc
-        fields = ['id','content','epoch','project']
+        fields = ['id','content','project']
 
 '''
 @description: 字典表的serializer
@@ -146,7 +147,103 @@ class DicSerializer(serializers.ModelSerializer):
         model = Dic
         fields = ['id','project','content','create_date','content','entity_template']
 
-class EpochSerializer(serializers.ModelSerializer):
+
+'''
+@description: 动态serializer的fields，继承该类的serializer可以在实例化时输入fields参数
+@param {type} 用于动态显示fields
+@return: 
+'''
+class DynamicFieldsModelSerializer(serializers.ModelSerializer):
+    """
+    A ModelSerializer that takes an additional `fields` argument that
+    controls which fields should be displayed.
+    """
+
+    def __init__(self, *args, **kwargs):
+        # Don't pass the 'fields' arg up to the superclass
+        fields = kwargs.pop('fields', None)
+
+        # Instantiate the superclass normally
+        super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
+
+        if fields is not None:
+            # Drop any fields that are not specified in the `fields` argument.
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+
+'''
+@description: 查询epoch信息，包括该epoch的annotator进度和reviewer进度
+@param {type} 动态变化，用于三个地方：project查看epoch信息；标注者查看epoch信息；审核者查看epoch
+@return: 因此要求是需要动态决定fields
+'''
+class EpochSerializer(DynamicFieldsModelSerializer):
+    annotate_progress = serializers.SerializerMethodField()
+    review_progress = serializers.SerializerMethodField()
+
     class Meta:
         model = Epoch
-        fields = ['id','num','state','re_annotate_num','annotator','reviewer','project']
+        fields = ['id','num','state','re_annotate_num','annotator','reviewer','project','annotate_progress','review_progress']
+
+    #obj是需要serialize的epoch对象，这里获得这个epoch该标注者的标注进度
+    def get_annotate_progress(self,obj):
+        data = {}
+        #查询这个epoch下的ann_allocation对象
+        ann_allocations = dao.get_ann_allocation_by_epoch(obj)
+        data['total_num'] = len(ann_allocations)
+        data['undo_num'] = len(ann_allocations.filter(state='UNDO'))
+        data['re_annotating_num'] = len(ann_allocations.filter(state='RE_ANNOTATING'))
+        data['waiting_num'] = len(ann_allocations.filter(state='WAITING'))
+        data['finish_num'] = len(ann_allocations.filter(state='FINISH'))
+        return data
+
+    #obj是需要serialize的epoch对象，这里获得这个epoch的review进度
+    def get_review_progress(self,obj):
+        data = {}
+        #查询这个epoch下的review_allocation对象
+        review_allocations = dao.get_review_allocation_by_epoch(obj)
+        data['total_num'] = len(review_allocations)
+        data['undo_num'] = len(review_allocations.filter(state='UNDO'))
+        data['finish_num'] = len(review_allocations.filter(state='FINISH'))
+        return data
+
+'''
+@description: 实体标注的serializer
+@param {type} 
+@return: 
+'''
+class EntityAnnotationSerializer(DynamicFieldsModelSerializer):
+    class Meta:
+        model = Entity_annotation
+        fields = ['id','doc','start_offset','end_offset','content','entity_template','user','role','event_group_annotation']
+
+'''
+@description: 关系标注的serializer，Relation这个
+@param {type} 
+@return: 
+'''       
+class RelationAnnotationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Relation_annotation
+        fields = ['id','doc','user','role','relation_entity_template','start_entity','end_entity']
+
+'''
+@description: 事件标注的serializer
+@param {type} 
+@return: 
+'''
+class EventAnnotationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Event_group_annotation
+        fields = ['id','doc','user','role','event_group_template']
+
+'''
+@description: 分类标注的serializer
+@param {type} 
+@return: 
+'''
+class ClassificationAnnotationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Classification_annotation
+        fields = ['id','doc','user','role','classification_template']
