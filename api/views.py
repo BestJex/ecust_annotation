@@ -1,7 +1,7 @@
 '''
 @Author: your name
 @Date: 2019-12-22 04:32:38
-@LastEditTime : 2020-01-03 05:12:44
+@LastEditTime : 2020-01-07 03:56:01
 @LastEditors  : Please set LastEditors
 @Description: In User Settings Edit
 @FilePath: /ecust_annotation/api/views.py
@@ -18,6 +18,7 @@ from api import utils
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from api import dao
+from django.views.decorators.csrf import csrf_exempt
 
 '''
 @description: 模板类型对应Serializer字典
@@ -611,10 +612,14 @@ class AnnotationConfirmation(generics.CreateAPIView):
 @description: 查询user的role
 @param {type} 
 @return: 
-'''     
+'''   
+@csrf_exempt  
 class RoleList(generics.ListAPIView):
     def get(self, request, *args, **kwargs):
-        role = Role.objects.filter(user=self.request.user)
+        try:
+            role = Role.objects.filter(user=self.request.user)
+        except:
+            return utils.return_Response('error','user not found',status.HTTP_404_NOT_FOUND)
         role_serializer = RoleSerializer(role,many=True)
         role_list = utils.serialize_user_role(role_serializer.data)
 
