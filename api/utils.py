@@ -1,8 +1,13 @@
 '''
 @Author: liangming
 @Date: 2019-12-26 08:28:23
+<<<<<<< HEAD
 @LastEditTime: 2020-03-04 00:31:36
 @LastEditors: Please set LastEditors
+=======
+@LastEditTime : 2020-01-03 06:36:54
+@LastEditors  : Please set LastEditors
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @Description: 各种工具方法
 @FilePath: /ecust_annotation/api/utils.py
 '''
@@ -216,6 +221,7 @@ def merge_epoch_data(serialize_data):
         if epoch_data['num'] > len(data):
             data_item = {}
             data_item['num'] = epoch_data['num']
+<<<<<<< HEAD
             data_item['state'] = ''
             # data_item['state'] = epoch_data['state']
             data_item['annotators'] = []
@@ -246,6 +252,16 @@ def get_epoch_state(data_item):
 
 
 '''
+=======
+            data_item['state'] = epoch_data['state']
+            data_item['annotators'] = []
+            data_item['reviewers'] = {'reviewer':epoch_data['reviewer'],'progress':epoch_data['review_progress']}
+            data.append(data_item)
+        data_item['annotators'].append({'annotator':epoch_data['annotator'],'progress':epoch_data['annotate_progress']})
+    return data
+
+'''
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @description: 判断user是否为annotator
 @param {type} 
 @return: 
@@ -376,6 +392,7 @@ def has_finish_epoch(doc,user,role):
     #第一次标注，判断条件是所有epoch都处于waiting状态
     #重标时，存在部分epoch已经finish，但是有一些epoch是re_annotation
     #因此判断处于waiting和finish状态的epoch是否等于该Epoch所对应的总epoch数
+<<<<<<< HEAD
     # epoch = doc.epoch.all().filter(state__in=['WAITING','FINISH'])
 
     # #查询doc对应proejct的epoch的总数
@@ -386,6 +403,12 @@ def has_finish_epoch(doc,user,role):
         if epoch.state != 'WAITING':
             return False
     return True
+=======
+    epoch = doc.epoch.all().filter(state__in=['WAITING','FINISH'])
+
+    #查询doc对应proejct的epoch的总数
+    return True if len(epoch) == len(dao.get_epoch_by_doc(doc)) else False
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 
 '''
 @description: 主动学习进行下一个epoch的筛选
@@ -409,10 +432,15 @@ def get_consistency_result(doc):
     #查询该Epoch所对应的所有doc
     doces = dao.get_doc_by_epoch(epoches)
     
+<<<<<<< HEAD
+=======
+    fields = ['start_offset','end_offset','content','entity_template','user']
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
     for doc in doces:
         annotation_data = {}
         annotation_data['doc_id'] = doc.pk
         annotation_data['content'] = doc.content
+<<<<<<< HEAD
         annotation_data['annotation_type'] = dao.get_project_type_by_doc(doc)
         #查询每一条doc对应的标注
         annotation_one,annotation_two = dao.get_annotation_of_doc(doc,annotation_data['annotation_type'])
@@ -436,6 +464,20 @@ def get_consistency_result(doc):
             consistency_annotation_list.append(consistency_annotation)
     #真实应该返回consistency_result
     return consistency_result,consistency_annotation_list
+=======
+        #查询每一条doc对应的标注
+        annotation_one,annotation_two = dao.get_annotation_of_doc(doc)
+        annotation_data['annotation_one'] = EntityAnnotationSerializer(annotation_one,fields=fields,many=True).data
+        annotation_data['annotation_two'] = EntityAnnotationSerializer(annotation_two,fields=fields,many=True).data
+        annotation_data_list.append(annotation_data)
+    print(annotation_data_list)
+    #进行一致性校验,consistency_result应该为一个list，里面记录需要重新标注的doc_id
+    c = consistency.Consistency(annotation_data_list)
+    consistency_result = c.refusedDocList(accept=0.9)
+    
+    #真实应该返回consistency_result
+    return consistency_result
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 
 '''
 @description: 输入一致性不通过的doc的id，将其annotation_allcation的对应记录state改为re_annotation，
@@ -488,6 +530,7 @@ def serialize_user_role(role_data):
     data = []
     for item in role_data:
         data.append(item['name'])
+<<<<<<< HEAD
     return data
 
 '''
@@ -558,3 +601,6 @@ def serialize_annotation_data(annotation_one,annotation_two,annotation_type):
         serialize_annotation_one['event'] = EventAnnotationSerializer(annotation_one['event'],fields=event_fields,many=True).data
         serialize_annotation_two['event'] = EventAnnotationSerializer(annotation_two['event'],fields=event_fields,many=True).data
     return serialize_annotation_one,serialize_annotation_two
+=======
+    return data
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664

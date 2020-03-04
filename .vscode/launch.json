@@ -4,7 +4,10 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+<<<<<<< HEAD
 
+=======
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
         {
             "name": "Python: Current File (Integrated Terminal)",
             "type": "python",
@@ -40,6 +43,11 @@
             "console": "integratedTerminal",
             "args": [
                 "runserver",
+<<<<<<< HEAD
+=======
+                "--noreload",
+                "--nothreading",
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
                 "0.0.0.0:10000"
             ],
             "django": true

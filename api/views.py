@@ -1,8 +1,13 @@
 '''
 @Author: your name
 @Date: 2019-12-22 04:32:38
+<<<<<<< HEAD
 @LastEditTime: 2020-03-04 00:00:50
 @LastEditors: Please set LastEditors
+=======
+@LastEditTime : 2020-01-07 03:56:01
+@LastEditors  : Please set LastEditors
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @Description: In User Settings Edit
 @FilePath: /ecust_annotation/api/views.py
 '''
@@ -415,6 +420,7 @@ class ProjectEpoch(APIView):
 
         annotators = User.objects.filter(pk__in=annotators_id)
         reviewers = User.objects.filter(pk__in=reviewers_id)
+<<<<<<< HEAD
 
         #验证annotators和reviewers的身份
         annotator_role = get_object_or_404(Role,name='annotator')
@@ -425,6 +431,8 @@ class ProjectEpoch(APIView):
         for reviewer in reviewers:
             if reviewer_role not in reviewer.role.all():
                 return utils.return_Response('errors','invalid reviewer of id = {}'.format(reviewer.id),status.HTTP_404_NOT_FOUND)
+=======
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
         if len(annotators) != len(annotators_id) or len(reviewers) != len(reviewers_id):
             return utils.return_Response('errors','has invalid user id',status.HTTP_404_NOT_FOUND)
 
@@ -482,7 +490,11 @@ class ReviewerEpoch(generics.ListAPIView):
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
+<<<<<<< HEAD
         print(serializer.data)
+=======
+
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
         merge_data = utils.merge_reviewer_epoch(serializer.data)
         
         return Response(merge_data)
@@ -598,6 +610,7 @@ class AnnotationConfirmation(generics.CreateAPIView):
                 waiting_epoch = dao.get_waiting_epoch(doc)
 
                 #机器进行一致性校验，不通过直接打回重标    
+<<<<<<< HEAD
                 consistency_result,consistency_annotation_list = utils.get_consistency_result(doc)
                 #如果consistency_result的长度为0，说明通过一致性校验，可以进入审核阶段
                 if len(consistency_result) == 0:        
@@ -607,12 +620,20 @@ class AnnotationConfirmation(generics.CreateAPIView):
                     
                     if not has_saved:
                         utils.return_Response('error','invalid_deserialize_data',status=status.HTTP_400_BAD_REQUEST)
+=======
+                consistency_result = utils.get_consistency_result(doc)  
+
+                #如果consistency_result的长度为0，说明通过一致性校验，可以进入审核阶段
+                if len(consistency_result) == 0:        
+                    dao.update_epoch_state(waiting_epoch,'REVIEWING')
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
                 else:
                     utils.re_annotation(consistency_result)
 
                 project = dao.get_project_by_doc(doc)
 
                 #是否为普通任务的最后一个epoch,如果不是则将下一个epoch激活
+<<<<<<< HEAD
                 if not dao.is_last_epoch(project,doc):
                     if project.project_type == 'NON_ACTIVE_LEARNING':
                         #如果不是ACITVE_LEARNING,则将下一个epoch的state改为ANNOTATING
@@ -623,6 +644,13 @@ class AnnotationConfirmation(generics.CreateAPIView):
                     if project.project_type == 'ACITVE_LEARNING':
                         #如果是主动学习，调用接口选择下一个epoch的doc并分配
                         pass
+=======
+                if not dao.is_last_epoch(project,doc) and project.project_type == 'NON_ACTIVE_LEARNING':
+                    #如果不是ACITVE_LEARNING,则将下一个epoch的state改为ANNOTATING
+                    next_epoch_num = annotator_epoch.num + 1
+                    next_epoches = dao.get_epoch_by_num_and_project(next_epoch_num,project)
+                    dao.update_epoch_state(next_epoches,'ANNOTATING')
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 
         return utils.return_Response('message','confirm successfully',status.HTTP_200_OK)
 
@@ -642,6 +670,7 @@ class RoleList(generics.ListAPIView):
         role_serializer = RoleSerializer(role,many=True)
         role_list = utils.serialize_user_role(role_serializer.data)
 
+<<<<<<< HEAD
         return utils.return_Response('roles',role_list,status.HTTP_200_OK)    
 
 '''
@@ -657,3 +686,6 @@ class ReviewerEpochDoc(generics.ListAPIView):
         epoch_id = self.kwargs['epochid']
         epoch = get_object_or_404(Epoch,pk=epoch_id)
         return dao.get_reviewer_epoch_doc(epoch)
+=======
+        return utils.return_Response('roles',role_list,status.HTTP_200_OK)    
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664

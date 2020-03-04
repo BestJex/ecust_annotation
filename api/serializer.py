@@ -1,8 +1,13 @@
 '''
 @Author: meloming
 @Date: 2019-12-22 04:19:00
+<<<<<<< HEAD
 @LastEditTime: 2020-03-03 07:22:13
 @LastEditors: Please set LastEditors
+=======
+@LastEditTime : 2020-01-03 02:16:36
+@LastEditors  : Please set LastEditors
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @Description: Serilizers
 @FilePath: /ecust_annotation/api/serializer.py
 '''

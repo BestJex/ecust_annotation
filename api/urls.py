@@ -1,8 +1,13 @@
 '''
 @Author: your name
 @Date: 2019-12-22 04:13:58
+<<<<<<< HEAD
 @LastEditTime: 2020-03-03 08:49:54
 @LastEditors: Please set LastEditors
+=======
+@LastEditTime : 2020-01-03 04:06:45
+@LastEditors  : Please set LastEditors
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @Description: In User Settings Edit
 @FilePath: /ecust_annotation/api/urls.py
 '''
@@ -28,8 +33,12 @@ urlpatterns = [
     path('projects/<int:projectid>/epoches/',ProjectEpoch.as_view(),name='project-epoch'),
     path('annotators/<int:annotatorid>/epoches/',AnnotatorEpoch.as_view(),name='annotator-epoch'),
     path('reviewers/<int:reviewerid>/epoches/',ReviewerEpoch.as_view(),name='reviewer-epoch'),
+<<<<<<< HEAD
     path('reviewers/epoches/<int:epochid>/docs/',ReviewerEpochDoc.as_view(),name='reviewer-epoch-doc'),
     path('annotators/epoches/<int:epochid>/docs/',EpochDoc.as_view(),name='epoch-doc'),
+=======
+    path('projects/epoches/<int:epochid>/docs/',EpochDoc.as_view(),name='epoch-doc'),
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
     path('projects/docs/<int:docid>/<str:role>/<int:userid>/annotations/',AnnotationList.as_view(),name='annotation'),
     path('projects/docs/<int:docid>/annotations/entities/',AnnotationEntity.as_view(),name='annotation-entity'),
     path('projects/docs/<int:docid>/annotations/relations/',AnnotationRelation.as_view(),name='annotation-reltaion'),

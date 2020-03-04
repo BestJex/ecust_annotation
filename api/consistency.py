@@ -1,8 +1,13 @@
 '''
 @Author: xuchenming
 @Date: 2020-01-03 06:04:24
+<<<<<<< HEAD
 @LastEditTime: 2020-03-04 00:35:28
 @LastEditors: Please set LastEditors
+=======
+@LastEditTime : 2020-01-03 06:19:01
+@LastEditors  : Please set LastEditors
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @Description: In User Settings Edit
 @FilePath: /ecust_annotation/api/consistency.py
 '''
@@ -12,12 +17,21 @@ class Consistency:
     
     @staticmethod
     def dicEntitytoTuple(entity):#输入实体的字典表示，输出实体的元组表示
+<<<<<<< HEAD
         return (entity["start_offset"],entity["end_offset"],entity["entity_template"],entity['content'])
     
     def getEntitySet(self,doc):#输入一条文本dic，返回两个标注者的标注结果set的dic
         anno1 = set(map(self.dicEntitytoTuple,doc["annotation_one"]['entity']))
         anno2 = set(map(self.dicEntitytoTuple,doc["annotation_two"]['entity']))
         return {doc["annotation_one"]['entity'][0]["user"]:anno1,doc["annotation_two"]['entity'][0]["user"]:anno2}
+=======
+        return (entity["start_offset"],entity["end_offset"],entity["entity_template"])
+    
+    def getEntitySet(self,doc):#输入一条文本dic，返回两个标注者的标注结果set的dic
+        anno1 = set(map(self.dicEntitytoTuple,doc["annotation_one"]))
+        anno2 = set(map(self.dicEntitytoTuple,doc["annotation_two"]))
+        return {doc["annotation_one"][0]["user"]:anno1,doc["annotation_two"][0]["user"]:anno2}
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
     
     @staticmethod
     def compF1Score(pred,truth):#计算F1值，输入是两个set
@@ -58,11 +72,18 @@ class Consistency:
         user1,user2 = tuple(anno.keys())
         diff1 = anno[user1]-anno[user2]
         diff2 = anno[user2]-anno[user1]
+<<<<<<< HEAD
         # print(diff1)
         for i in diff1:
             diff["different_set"]["annotation_one"].append({"start_offset":i[0],"end_offset":i[1],"entity_template":i[2],"content":i[3]})
         for i in diff2:
             diff["different_set"]["annotation_two"].append({"start_offset":i[0],"end_offset":i[1],"entity_template":i[2],"content":i[3]})
+=======
+        for i in diff1:
+            diff["different_set"]["annotation_one"].append({"start_offset":i[0],"end_offset":i[1],"entity_template":i[2],"user":user1})
+        for i in diff2:
+            diff["different_set"]["annotation_two"].append({"start_offset":i[0],"end_offset":i[1],"entity_template":i[2],"user":user2})
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
         return diff
     
     def getIntersection(self,doc=None):#输入doc的dic,输出两个标注结果的交集
@@ -73,7 +94,11 @@ class Consistency:
         user1,user2 = tuple(anno.keys())
         inter_temp = anno[user1]&anno[user2]
         for i in inter_temp:
+<<<<<<< HEAD
             inter["intersection"].append({"start_offset":i[0],"end_offset":i[1],"entity_template":i[2],"content":i[3]})
+=======
+            inter["intersection"].append({"start_offset":i[0],"end_offset":i[1],"entity_template":i[2]})
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
         return inter
     
     def getDiffInter(self,doc=None):#输入doc的dic,输出两个标注结果的并集和交集

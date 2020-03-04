@@ -1,8 +1,13 @@
 '''
 @Author: liangming
 @Date: 2019-12-27 00:27:40
+<<<<<<< HEAD
 @LastEditTime: 2020-03-03 21:35:50
 @LastEditors: Please set LastEditors
+=======
+@LastEditTime : 2020-01-03 06:46:42
+@LastEditors  : Please set LastEditors
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @Description: 复杂查询接口
 @FilePath: /ecust_annotation/api/dao.py
 '''
@@ -86,16 +91,24 @@ def get_ann_allocation_by_epoch(epoch):
     return Annotate_allocation.objects.filter(annotator=epoch.annotator).filter(doc__in=epoch_docs)
 
 '''
+<<<<<<< HEAD
 @description: 查询这个epoch对应的epoch_num下的的revew_allocation对象
+=======
+@description: 查询这个epoch下的revew_allocation对象
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @param {type} 
 @return: 
 '''
 def get_review_allocation_by_epoch(epoch):
+<<<<<<< HEAD
     epoch_num = epoch.num
     project = epoch.project
     epoch_list = Epoch.objects.filter(project=project).filter(num=epoch_num)
     print(epoch_list)
     epoch_docs = get_doc_by_epoch(epoch_list)
+=======
+    epoch_docs = epoch.doc.all()
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
     return Review_allocation.objects.filter(reviewer=epoch.reviewer).filter(doc__in=epoch_docs)
 
 '''
@@ -230,7 +243,11 @@ def get_epoch_by_doc(doc):
 @return: 
 '''
 def get_waiting_epoch(doc):
+<<<<<<< HEAD
     return get_epoch_by_doc(doc).filter(state='WAITING')
+=======
+    return doc.epoch.all().filter(state='WAITING')
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 
 '''
 @description: 查询doc的project
@@ -270,16 +287,25 @@ def get_doc_by_epoch(epoches):
         return Doc.objects.filter(epoch=epoches)
 
 '''
+<<<<<<< HEAD
 @description: 输入doc查询两个标注者对其的标注结果，要根据annotation_type查询不同的东西
 @param {type} 
 @return: 
 '''
 def get_annotation_of_doc(doc,annotation_type):
+=======
+@description: 输入doc查询两个标注者对其的标注结果
+@param {type} 
+@return: 
+'''
+def get_annotation_of_doc(doc):
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
     #查询该doc对应的两个epoch，对应两个annotator
     doc_epoch = doc.epoch.all()
     annotator_one = doc_epoch[0].annotator
     annotator_two = doc_epoch[1].annotator
 
+<<<<<<< HEAD
     annotation_one,annotation_two = {},{}
     if annotation_type == 'NER':
         #查询annotator_one的标注结果
@@ -300,6 +326,11 @@ def get_annotation_of_doc(doc,annotation_type):
         annotation_one['event'] = Event_group_annotation.objects.filter(doc=doc).filter(user=annotator_one)
         annotation_two['event'] = Event_group_annotation.objects.filter(doc=doc).filter(user=annotator_two)
 
+=======
+    #查询annotator_one的标注结果
+    annotation_one = Entity_annotation.objects.filter(doc=doc).filter(user=annotator_one)
+    annotation_two = Entity_annotation.objects.filter(doc=doc).filter(user=annotator_two)
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
     return annotation_one,annotation_two
 
 '''
@@ -317,6 +348,7 @@ def get_doc_epoch(doc):
 @return: 
 '''
 def update_epoch_re_annotate_num(epoch,re_annotate_num):
+<<<<<<< HEAD
     epoch.re_annotate_num = re_annotate_num
 '''
 @description: 
@@ -336,3 +368,6 @@ def get_reviewer_epoch_doc(epoch):
 '''
 def get_project_type_by_doc(doc):
     return doc.project.template.template_type
+=======
+    epoch.re_annotate_num = re_annotate_num
+>>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
