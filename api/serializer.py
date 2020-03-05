@@ -2,7 +2,7 @@
 @Author: meloming
 @Date: 2019-12-22 04:19:00
 <<<<<<< HEAD
-@LastEditTime: 2020-03-03 07:22:13
+@LastEditTime: 2020-03-04 21:03:18
 @LastEditors: Please set LastEditors
 =======
 @LastEditTime : 2020-01-03 02:16:36
@@ -228,7 +228,7 @@ class EntityAnnotationSerializer(DynamicFieldsModelSerializer):
 @param {type} 
 @return: 
 '''       
-class RelationAnnotationSerializer(serializers.ModelSerializer):
+class RelationAnnotationSerializer(DynamicFieldsModelSerializer):
     class Meta:
         model = Relation_annotation
         fields = ['id','doc','user','role','relation_entity_template','start_entity','end_entity']
@@ -238,7 +238,7 @@ class RelationAnnotationSerializer(serializers.ModelSerializer):
 @param {type} 
 @return: 
 '''
-class EventAnnotationSerializer(serializers.ModelSerializer):
+class EventAnnotationSerializer(DynamicFieldsModelSerializer):
     class Meta:
         model = Event_group_annotation
         fields = ['id','doc','user','role','event_group_template']
@@ -248,7 +248,7 @@ class EventAnnotationSerializer(serializers.ModelSerializer):
 @param {type} 
 @return: 
 '''
-class ClassificationAnnotationSerializer(serializers.ModelSerializer):
+class ClassificationAnnotationSerializer(DynamicFieldsModelSerializer):
     class Meta:
         model = Classification_annotation
         fields = ['id','doc','user','role','classification_template']

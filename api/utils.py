@@ -1,13 +1,8 @@
 '''
 @Author: liangming
 @Date: 2019-12-26 08:28:23
-<<<<<<< HEAD
-@LastEditTime: 2020-03-04 00:31:36
+@LastEditTime: 2020-03-04 21:21:30
 @LastEditors: Please set LastEditors
-=======
-@LastEditTime : 2020-01-03 06:36:54
-@LastEditors  : Please set LastEditors
->>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @Description: 各种工具方法
 @FilePath: /ecust_annotation/api/utils.py
 '''
@@ -221,7 +216,6 @@ def merge_epoch_data(serialize_data):
         if epoch_data['num'] > len(data):
             data_item = {}
             data_item['num'] = epoch_data['num']
-<<<<<<< HEAD
             data_item['state'] = ''
             # data_item['state'] = epoch_data['state']
             data_item['annotators'] = []
@@ -239,6 +233,8 @@ def merge_epoch_data(serialize_data):
 def get_epoch_state(data_item):
     state_list = [x['annotator_state'] for x in data_item['annotators']]
     #如果存在正在标注的，则整个epoch_num处于正在标注
+    if 'UNDO' in state_list:
+        return 'UNDO'
     if 'ANNOTATING' in state_list:
         return 'ANNOTATING'
     #如果存在一个重复标注的的，整个epoch_num处于重复标注
@@ -252,16 +248,6 @@ def get_epoch_state(data_item):
 
 
 '''
-=======
-            data_item['state'] = epoch_data['state']
-            data_item['annotators'] = []
-            data_item['reviewers'] = {'reviewer':epoch_data['reviewer'],'progress':epoch_data['review_progress']}
-            data.append(data_item)
-        data_item['annotators'].append({'annotator':epoch_data['annotator'],'progress':epoch_data['annotate_progress']})
-    return data
-
-'''
->>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @description: 判断user是否为annotator
 @param {type} 
 @return: 
@@ -392,7 +378,6 @@ def has_finish_epoch(doc,user,role):
     #第一次标注，判断条件是所有epoch都处于waiting状态
     #重标时，存在部分epoch已经finish，但是有一些epoch是re_annotation
     #因此判断处于waiting和finish状态的epoch是否等于该Epoch所对应的总epoch数
-<<<<<<< HEAD
     # epoch = doc.epoch.all().filter(state__in=['WAITING','FINISH'])
 
     # #查询doc对应proejct的epoch的总数
@@ -403,12 +388,6 @@ def has_finish_epoch(doc,user,role):
         if epoch.state != 'WAITING':
             return False
     return True
-=======
-    epoch = doc.epoch.all().filter(state__in=['WAITING','FINISH'])
-
-    #查询doc对应proejct的epoch的总数
-    return True if len(epoch) == len(dao.get_epoch_by_doc(doc)) else False
->>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 
 '''
 @description: 主动学习进行下一个epoch的筛选
@@ -432,52 +411,26 @@ def get_consistency_result(doc):
     #查询该Epoch所对应的所有doc
     doces = dao.get_doc_by_epoch(epoches)
     
-<<<<<<< HEAD
-=======
-    fields = ['start_offset','end_offset','content','entity_template','user']
->>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
     for doc in doces:
         annotation_data = {}
         annotation_data['doc_id'] = doc.pk
         annotation_data['content'] = doc.content
-<<<<<<< HEAD
         annotation_data['annotation_type'] = dao.get_project_type_by_doc(doc)
         #查询每一条doc对应的标注
         annotation_one,annotation_two = dao.get_annotation_of_doc(doc,annotation_data['annotation_type'])
         annotation_data['annotation_one'],annotation_data['annotation_two'] = serialize_annotation_data(annotation_one,annotation_two,annotation_data['annotation_type'])
         annotation_data_list.append(annotation_data)
-    # print(annotation_data_list)
-    #进行一致性校验,consistency_result应该为一个list，里面记录需要重新标注的doc_id
-    c = consistency.Consistency(annotation_data_list)
-    consistency_result = c.refusedDocList(accept=0.9)
-
-    #如果没有需要重写的，得到每条doc的二者标注并集，并返回
-    consistency_annotation_list = []
-    if len(consistency_result) == 0:
-        for annotation_data in annotation_data_list:
-            consistency_annotation = {}
-            consistency_annotation['doc_id'] = annotation_data['doc_id']
-            differ_and_innter_dic = c.getDiffInter(annotation_data)
-            consistency_annotation['entity'] = differ_and_innter_dic['intersection'] + \
-                                                        differ_and_innter_dic['different_set']['annotation_one'] + \
-                                                            differ_and_innter_dic['different_set']['annotation_two']
-            consistency_annotation_list.append(consistency_annotation)
-    #真实应该返回consistency_result
-    return consistency_result,consistency_annotation_list
-=======
-        #查询每一条doc对应的标注
-        annotation_one,annotation_two = dao.get_annotation_of_doc(doc)
-        annotation_data['annotation_one'] = EntityAnnotationSerializer(annotation_one,fields=fields,many=True).data
-        annotation_data['annotation_two'] = EntityAnnotationSerializer(annotation_two,fields=fields,many=True).data
-        annotation_data_list.append(annotation_data)
     print(annotation_data_list)
     #进行一致性校验,consistency_result应该为一个list，里面记录需要重新标注的doc_id
-    c = consistency.Consistency(annotation_data_list)
-    consistency_result = c.refusedDocList(accept=0.9)
+    score_list = consistency.Consistency(annotation_data_list).getSimScore()
+    consistency_result = consistency.Consistency(annotation_data_list).refusedDocList(score_list,accept=0)
     
+
+    #如果没有需要重写的，得到每条doc的二者标注并集，并返回
+    consistency_annotation_list = consistency.Consistency(annotation_data_list).getUnion()
+    print(consistency_annotation_list)
     #真实应该返回consistency_result
-    return consistency_result
->>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
+    return consistency_result,consistency_annotation_list
 
 '''
 @description: 输入一致性不通过的doc的id，将其annotation_allcation的对应记录state改为re_annotation，
@@ -530,7 +483,6 @@ def serialize_user_role(role_data):
     data = []
     for item in role_data:
         data.append(item['name'])
-<<<<<<< HEAD
     return data
 
 '''
@@ -545,30 +497,81 @@ def save_union_annotations(consistency_annotation_list,annotator_epoch):
     role = Role.objects.get(name='reviewer').id
     template_type = annotator_epoch.project.template.template_type
     if template_type == 'NER':
-        #解析数据组装后并保存
-        entity_annotation_list = []
-        for doc_annotation in consistency_annotation_list:
-            for doc_entity_annotation in doc_annotation['entity']:
-                entity_annotation_dic = doc_entity_annotation
-                entity_annotation_dic['user'] = reviewer
-                entity_annotation_dic['role'] = role
-                entity_annotation_dic['doc'] = doc_annotation['doc_id']
-                entity_annotation_list.append(entity_annotation_dic)
-        # print(entity_annotation_list)
-        entity_serializer = EntityAnnotationSerializer(data=entity_annotation_list,many=True)
-        #如果数据无误保存并返回entity对象
-        if entity_serializer.is_valid():
-            entity_objects = entity_serializer.save()
-        else:
+        #序列化union的对象，并保存，如果出错返回False
+        entity_objects = serialize_union_entity(consistency_annotation_list,reviewer,role,template_type)
+        if isinstance(entity_objects,bool):
             return False
 
-    elif annotation_type == 'RE':
-        pass
-    elif annotation_type == 'CLASSIFICATION':
+    elif template_type == 'RE':
+        #先保存实体
+        entity_objects = serialize_union_entity(consistency_annotation_list,reviewer,role,template_type)
+        if isinstance(entity_objects,bool):
+            return False
+        print('entity_saved')
+        #再保存关系
+        relation_objects = serialize_union_relation(entity_objects,consistency_annotation_list,reviewer,role,template_type)
+        if isinstance(relation_objects,bool):
+            print()
+            return False
+        print('relation_saved')
+
+    elif template_type == 'CLASSIFICATION':
         pass
     else:
         pass
     return True
+
+'''
+@description: 序列化通过一致性校验的关系的并集，需要先保存实体，如果成功返回对象，否则返回False
+@param {type} 
+@return: 
+'''
+def serialize_union_relation(entity_objects,consistency_annotation_list,reviewer,role,template_type):
+    relatino_annotation_list = []
+    for doc_annotation in consistency_annotation_list:
+        for doc_relation_annotation in doc_annotation['relation']:
+            relation_annotation_dic = doc_relation_annotation
+            relation_annotation_dic['start_entity'] = entity_objects[relation_annotation_dic['start_entity']].id
+            relation_annotation_dic['end_entity'] = entity_objects[relation_annotation_dic['end_entity']].id
+            relation_annotation_dic['user'] = reviewer
+            relation_annotation_dic['role'] = role
+            relation_annotation_dic['doc'] = doc_annotation['doc_id']
+            relatino_annotation_list.append(relation_annotation_dic)
+    relation_serializer = RelationAnnotationSerializer(data=relatino_annotation_list,many=True)
+    #如果数据无误保存并返回entity对象
+    if relation_serializer.is_valid():
+        relation_objects = relation_serializer.save()
+        return relation_objects
+    else:
+        print('-'*10)
+        print(relatino_annotation_list)
+        return False
+
+'''
+@description: 序列化通过一致性校验的实体的并集，并以审核者的身份保存，如果成功返回保存对象，如果错误返回FALSE
+@param {type} 
+@return: 
+'''
+def serialize_union_entity(consistency_annotation_list,reviewer,role,template_type):
+    #解析数据组装后并保存
+    entity_annotation_list = []
+    for doc_annotation in consistency_annotation_list:
+        for doc_entity_annotation in doc_annotation['entity']:
+            entity_annotation_dic = doc_entity_annotation
+            entity_annotation_dic['user'] = reviewer
+            entity_annotation_dic['role'] = role
+            entity_annotation_dic['doc'] = doc_annotation['doc_id']
+            entity_annotation_list.append(entity_annotation_dic)
+    print(entity_annotation_list)
+    entity_serializer = EntityAnnotationSerializer(data=entity_annotation_list,many=True)
+    #如果数据无误保存并返回entity对象
+    if entity_serializer.is_valid():
+        entity_objects = entity_serializer.save()
+        return entity_objects
+    else:
+        return False
+
+
 
 '''
 @description: 序列化两个标注者对一个文本的标注内容，根据其标注类型决定
@@ -577,10 +580,10 @@ def save_union_annotations(consistency_annotation_list,annotator_epoch):
 '''    
 def serialize_annotation_data(annotation_one,annotation_two,annotation_type):
     serialize_annotation_one,serialize_annotation_two = {},{}
-    entity_fields = ['id','start_offset','end_offset','content','entity_template','user','event_group_annotation']
-    relation_fields = ['id','user','relation_entity_template','start_entity','end_entity']
-    event_fields = ['id','user','event_group_template']
-    classification_fields = ['id','user','classification_template']
+    entity_fields = ['id','start_offset','end_offset','content','entity_template','event_group_annotation']
+    relation_fields = ['id','relation_entity_template','start_entity','end_entity']
+    event_fields = ['id','event_group_template']
+    classification_fields = ['id','classification_template']
     
     if annotation_type == 'NER':
         #查询annotator_one的标注结果
@@ -601,6 +604,3 @@ def serialize_annotation_data(annotation_one,annotation_two,annotation_type):
         serialize_annotation_one['event'] = EventAnnotationSerializer(annotation_one['event'],fields=event_fields,many=True).data
         serialize_annotation_two['event'] = EventAnnotationSerializer(annotation_two['event'],fields=event_fields,many=True).data
     return serialize_annotation_one,serialize_annotation_two
-=======
-    return data
->>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
