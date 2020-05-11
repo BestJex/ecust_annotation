@@ -127,11 +127,35 @@ class Doc(models.Model):
     epoch = models.ManyToManyField(Epoch, related_name='doc')
     project = models.ForeignKey(Project,related_name='doc',on_delete=models.CASCADE)
 
+class Standard(models.Model):
+    entity_template = models.ForeignKey(Entity_template,related_name='standard',on_delete=models.CASCADE)
+    standard_name = models.CharField(max_length=20)
+    project = models.ForeignKey(Project,related_name="standard",on_delete=models.CASCADE)
+    create_date = models.DateTimeField(auto_now_add=True)
+
 class Dic(models.Model):
     project = models.ForeignKey(Project,related_name='dic',on_delete=models.CASCADE)
     create_date = models.DateTimeField(auto_now_add=True)
     content = models.CharField(max_length=100)
-    entity_template = models.ForeignKey(Entity_template,related_name='dic',on_delete=models.PROTECT)
+    entity_template = models.ForeignKey(Entity_template,related_name='dic',on_delete=models.CASCADE)
+    standard = models.ForeignKey(Standard, related_name='dic', on_delete=models.CASCADE, default='', null=True)
+    class Meta:
+        unique_together = ['project', 'content']
+
+class Re(models.Model):
+    project = models.ForeignKey(Project,related_name='re',on_delete=models.CASCADE)
+    create_date = models.DateTimeField(auto_now_add=True)
+    content = models.CharField(max_length=100)
+    class Meta:
+        unique_together = ['project', 'content']
+
+class Re_entity_template(models.Model):
+    re = models.ForeignKey(Re, related_name='re', on_delete=models.CASCADE)
+    entity_template = models.ForeignKey(Entity_template, related_name='entity_template', on_delete=models.CASCADE)
+    order = models.IntegerField()
+
+    class Meta:
+        unique_together = ['re', 'entity_template', 'order']
 
 class Annotate_allocation(models.Model):
     UNDO = 'UNDO'
@@ -212,6 +236,7 @@ class Entity_annotation(models.Model):
     role = models.ForeignKey(Role,related_name='entity_annotation',on_delete=models.PROTECT)
     event_group_annotation = models.ForeignKey(Event_group_annotation,related_name='entity_annotation',on_delete=models.CASCADE,null=True)
     create_date = models.DateTimeField(auto_now_add=True)
+    standard = models.ForeignKey(Standard,related_name='entity_annotation',on_delete=models.CASCADE,null=True)
 
 class Relation_annotation(models.Model):
     doc = models.ForeignKey(Doc,related_name='relation_annotation',on_delete=models.CASCADE)
@@ -221,3 +246,4 @@ class Relation_annotation(models.Model):
     start_entity = models.ForeignKey(Entity_annotation,related_name='start_entity_relation_annotation',on_delete=models.CASCADE)
     end_entity = models.ForeignKey(Entity_annotation,related_name='end_entity_relation_annotation',on_delete=models.CASCADE)
     relation_entity_template = models.ForeignKey(Relation_entity_template,related_name='relation_annotation',on_delete=models.PROTECT)
+

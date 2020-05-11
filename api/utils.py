@@ -1,7 +1,7 @@
 '''
 @Author: liangming
 @Date: 2019-12-26 08:28:23
-@LastEditTime: 2020-03-04 21:21:30
+@LastEditTime: 2020-05-10 06:05:17
 @LastEditors: Please set LastEditors
 @Description: 各种工具方法
 @FilePath: /ecust_annotation/api/utils.py
@@ -11,42 +11,47 @@ from rest_framework.response import Response
 from rest_framework import status
 from api.models import *
 from api.serializer import *
+from django.db import transaction
 from api import dao
 from django.shortcuts import get_object_or_404
 import math
 import random
+import re
 from api import consistency
+import pickle
+import json
+import pandas as pd
 
 '''
 @description: 验证上传文件是否符合要求，读取所有的文件，并保存在一个list中返回
 @param {file} 
 @return: file中每行的list，如果出错，返回报错信息
 '''
-def validate_files(files,ann_num_per_epoch):
+def validate_files(files):
     docs = []
     #迭代每个文件
     for f in files.getlist('file'):
-        #迭代文件中的每一行
-        for line in f:
-            #如果不为utf-8则跳过改行
-            if chardet.detect(line)['encoding'] not in ['utf-8','ascii']:
-                continue 
-            doc_line = line.decode('utf-8').strip().replace('\r','').replace('\n','')
-            #如果该行为空
-            if doc_line == "":
-                continue
-            docs.append(doc_line)
+        # #迭代文件中的每一行
+        # for line in f:
+        #     #如果不为utf-8则跳过改行
+        #     if chardet.detect(line)['encoding'] not in ['utf-8','ascii']:
+        #         continue 
+        #     doc_line = line.decode('utf-8').strip().replace('\r','').replace('\n','')
+        #     #如果该行为空
+        #     if doc_line == "":
+        #         continue
+        #     docs.append(doc_line)
+
+        #每个文件就是一份数据
+        doc = f.read().decode()
+        #如果是windows上传的,把\r\n替换成\n 
+        doc = doc.replace('\r\n','\n')
+        docs.append(doc)
+        
 
     #如果没有上传文件或者文件格式不正确，报错
     if len(docs) == 0:
         return return_Response('error','not valid file format!',status.HTTP_400_BAD_REQUEST)
-
-    #如果传ann_num_per_epoch,报错
-    if ann_num_per_epoch == '':
-        return return_Response('error','ann_num_per_epoch could not be null',status.HTTP_400_BAD_REQUEST)
-
-    if int(ann_num_per_epoch) > len(docs) or int(ann_num_per_epoch) < 1:
-        return return_Response('error','ann_num_per_epoch is bigger than the whole doc',status.HTTP_400_BAD_REQUEST)
 
     return docs
 
@@ -63,9 +68,8 @@ def serialize_doc(docs,project_id):
 @param {type} 
 @return: 如果中途出现问题，返回Respone类型；如果没有出错，返回dic的list，里面是serialize好的字典数据，可直接save
 '''
-def validate_dic(file,project_id):
+def validate_dic(file_list,project):
     dic = []
-    project = get_object_or_404(Project,pk=project_id)
     #得到project下所有的queryset
     entity_template_query_set = dao.get_entity_template_by_project(project)
 
@@ -73,28 +77,55 @@ def validate_dic(file,project_id):
     if len(entity_template_query_set) == 0:
         return return_Response('error','the template of this project does not have any entity template',status.HTTP_404_NOT_FOUND)
         
-    for line in file:
-        #如果不为utf-8则跳过改行
-        encoding = chardet.detect(line)['encoding']
-        if encoding not in ['utf-8','ascii']:
-            continue 
-        dic_line = line.decode('utf-8').strip().replace('\r','').replace('\n','')
-        #如果该行为空
-        if dic_line == "":
-            continue
-        dic_arr = dic_line.split('\t')
-        content,entity_name = dic_arr[0],dic_arr[1]
-        #看entity_name是否在entity_list中
-        entity_template = has_entity_template_by_entity_name(entity_template_query_set,entity_name)
-        #如果没找到就读下一行
-        if entity_template is None:
-            continue
-        dic.append({'project':project_id,'content':content,'entity_template':entity_template.id})
+    for f in file_list.getlist('file'):
+        df = pd.read_excel(f)
+        #将df中的nan改为''
+        df = df.fillna('')
+        for index, row in df.iterrows():
+            content = row['content']
+            entity_name = row['entity_name']
+            standard_name = row['standard_name']
+            dic_dict = validate_dic_data(content, entity_name, standard_name, project)
+            if isinstance(dic_dict, Response):
+                return dic_dict
+
+            dic.append(dic_dict)
 
     if len(dic) == 0:
         return return_Response('error','no valid data in uploaded dic file! may be input wrong entity name',status.HTTP_400_BAD_REQUEST)
     
     return dic
+
+'''
+@description: 验证手动上传的字典
+@param {type} 
+@return: 
+'''
+def validate_dic_data(content, entity_name, standard_name, project):
+    dic_dict = {}
+    dic_dict['project'] = project.id
+    dic_dict['content'] = content
+
+    #得到project下所有的queryset
+    entity_template_query_set = dao.get_entity_template_by_project(project)
+
+    entity_template = has_entity_template_by_entity_name(entity_template_query_set,entity_name)
+    #如果没找到就读下一行, 如果有查看标准是否存在
+    if entity_template is None:
+        return return_Response('error', 'no entity_template called ' + entity_name, status.HTTP_400_BAD_REQUEST)
+    else:
+        dic_dict['entity_template'] = entity_template.id
+        if standard_name != '':
+            standard_queryset = has_standard_template_by_standard_name(entity_template, standard_name)
+            if len(standard_queryset) == 0:
+                print(entity_name, standard_name)
+                resp_content = entity_name + ' has no standard called ' + standard_name 
+                return return_Response('error', resp_content, status.HTTP_400_BAD_REQUEST)
+            else:
+                standard = standard_queryset[0]
+                dic_dict['standard'] = standard.id
+        return dic_dict
+
 
 '''
 @description: 返回message
@@ -144,19 +175,21 @@ def get_epoch_serializer_data(project,annotators,reviewers):
             data['reviewer'] = reviewers[epoch_num%len(reviewers)].id
             data['annotator'] = annotator.id
 
-            #如果是第一个epoch，state改为ANNOTATING
-            if epoch_num == 0:
-                data['state'] = 'ANNOTATING'
+            #每一个epoch都是annotating
+            data['state'] = 'ANNOTATING'
             serialize_data.append(data)
             print(data,'\n')
     return serialize_data,total_epoches
 
 '''
-@description: 分配ann_allocation和review_allocation
+@description: 分配ann_allocation和review_allocation,如果上传了答案，对答案需要做解析
 @param {type} 
 @return: 
 '''
-def get_annotation_review_allocation(project,total_allocate_epoch,annotators,reviewers):
+def get_annotation_review_allocation(project,total_allocate_epoch,annotators,reviewers,answer_list):
+    #查询所有project的doc
+    project_doc_list = dao.get_doc_by_project(project)
+    project_doc_id_list = [x.id for x in project_doc_list]
     for epoch_num in range(total_allocate_epoch):
         #获得该epoch_num的所有epoch（每个annotator一个）
         epoches = dao.get_epoch_by_num_and_project(epoch_num+1,project)
@@ -164,10 +197,9 @@ def get_annotation_review_allocation(project,total_allocate_epoch,annotators,rev
         #获取待分配的doc，其中地雷任务会返回全部
         docs = get_random_unallocated_docs_by_project(project)
 
-        #对每一条文本进行分配,每一个doc分配两个annotator一个reviewer
-        #即每个doc分配和两个epoch做分配
-        for doc_index in range(2*len(docs)):
-            doc = docs[doc_index//2]
+        #每一个doc分配给一个annotator及一个reviewer
+        for doc_index in range(len(docs)):
+            doc = docs[doc_index]
             epoch = epoches[doc_index%len(epoches)]
 
             #更新doc的epoch
@@ -176,9 +208,37 @@ def get_annotation_review_allocation(project,total_allocate_epoch,annotators,rev
             #创建annotation_allocation
             dao.create_annotation_allocation(doc,epoch)
 
-            #每一个doc两个annotator一个reviewer
-            if doc_index%2 == 0:
-                dao.create_review_allocation(doc,epoch)
+            #创建reviewr_allocation
+            dao.create_review_allocation(doc,epoch)
+
+            #如果answer_list不为零，则要预先写入答案
+            if len(answer_list) != 0:
+                success = pre_save_answer(doc,epoch,answer_list,project_doc_id_list,project)
+                if not success:
+                    print('false')
+                
+
+        #对每一条文本进行分配,每一个doc分配两个annotator一个reviewer
+        #即每个doc分配和两个epoch做分配
+        # for doc_index in range(2*len(docs)):
+        #     doc = docs[doc_index//2]
+        #     epoch = epoches[doc_index%len(epoches)]
+
+        #     #更新doc的epoch
+        #     dao.update_doc_epoch(doc,epoch)
+
+        #     #创建annotation_allocation
+        #     dao.create_annotation_allocation(doc,epoch)
+
+        #     #如果answer_list不为零，则要预先写入答案
+        #     if len(answer_list) != 0:
+        #         success = pre_save_answer(doc,epoch,answer_list,project_doc_id_list,project)
+        #         if not success:
+        #             print('false')
+
+        #     #每一个doc两个annotator一个reviewer
+        #     if doc_index%2 == 0:
+        #         dao.create_review_allocation(doc,epoch)
             
 
 
@@ -298,7 +358,26 @@ def get_ner_annotation(doc,user,role):
     #首先获取entity_annotation的queryset
     entity_annotation = dao.get_entity_annotation_by_doc(doc,user,role)
     serializer = EntityAnnotationSerializer(entity_annotation,many=True)
-    return serializer.data
+    data = []
+    for item in serializer.data:
+        dic = item
+        entity_template_id = item['entity_template']
+        entity_group_template = dao.get_entity_group_template_by_entity_template(entity_template_id)
+        event_group_template = dao.get_event_group_template_by_entity_template(entity_template_id)
+        if entity_group_template is not None:
+            dic['entity_group_template_name'] = entity_group_template.name
+        else:
+            dic['entity_group_template_name'] = ''
+
+        if event_group_template is not None:
+            dic['event_group_tempalte_name'] = event_group_template.name
+        else:  
+            dic['event_group_template_name'] = ''
+
+            
+        data.append(dic)
+
+    return data
 
 '''
 @description: 返回re的标注结果
@@ -604,3 +683,521 @@ def serialize_annotation_data(annotation_one,annotation_two,annotation_type):
         serialize_annotation_one['event'] = EventAnnotationSerializer(annotation_one['event'],fields=event_fields,many=True).data
         serialize_annotation_two['event'] = EventAnnotationSerializer(annotation_two['event'],fields=event_fields,many=True).data
     return serialize_annotation_one,serialize_annotation_two
+
+'''
+@description: 解析上传的answer文件
+@param {type} 
+@return: 
+'''
+def resolve_answer_file(answer_file):
+    if len(answer_file) == 0:
+        return []
+    else:
+        for f in answer_file.getlist('file'):
+            print(f, type(f))
+            data = f.read()
+            return json.loads(data.decode())
+
+'''
+@description: 存储answer文件
+@param {type} 
+@return: 
+'''
+def pre_save_answer(doc,epoch,answer_list,project_doc_id_list,project):
+    print(answer_list)
+    #得到该doc在之前上传的doc的index，是按顺序来的，以此找到其答案index
+    answer_index = project_doc_id_list.index(doc.id)
+    answer = answer_list[answer_index]
+    annotation_type = dao.get_annotation_type_by_doc(doc)
+    if annotation_type == 'NER':
+        entity_list = answer['entity']
+        serialize_entity_list = serialize_answer_entity_list(entity_list,project,epoch,doc)
+        entity_serializer = EntityAnnotationSerializer(data=serialize_entity_list,many=True)
+        if entity_serializer.is_valid():
+            entity_annotation_list = entity_serializer.save()
+        else:
+            return False     
+    elif annotation_type == 'RE':
+        entity_list = answer['entity']
+        serialize_entity_list = serialize_answer_entity_list(entity_list,project,epoch,doc)
+        entity_serializer = EntityAnnotationSerializer(data=serialize_entity_list,many=True)
+        if entity_serializer.is_valid():
+            entity_annotation_list = entity_serializer.save()
+
+            relation_list = answer['relation']
+            #如果实体保存成功，接下来保存关系
+            serialize_relation_list = serialize_answer_relation_list(relation_list,project,epoch,doc,entity_annotation_list)
+            relation_serializer = RelationAnnotationSerializer(data=serialize_relation_list,many=True)
+            if relation_serializer.is_valid():
+                relation_serializer.save()
+            else:
+                print(serialize_entity_list,serialize_relation_list)
+                return False
+        else:
+            print(serialize_entity_list)
+            return False     
+    elif annotation_type == 'EVENT':
+        event_group_list = answer['event_group']
+        for event_group in event_group_list:
+            #首先标注事件组
+            event_group_template_name = event_group['event_group_template']
+            event_group_dic = serialize_answer_event_group(event_group_template_name, epoch, doc)
+            event_group_serializer = EventAnnotationSerializer(data=event_group_dic)
+            print('werwerwe',event_group_dic)
+            if event_group_serializer.is_valid():
+                event_group_annotation = event_group_serializer.save()
+            else:
+                print('event group data is invalid')
+                return False
+            #接下来标记该事件下的所有实体
+            entity_list = event_group['entity']
+            print('werwerwaaaaaaa',entity_list)
+            serialize_entity_list = serialize_answer_entity_list(entity_list,project,epoch,doc,event_group_annotation=event_group_annotation)
+            entity_serializer = EntityAnnotationSerializer(data=serialize_entity_list,many=True)
+            print(serialize_entity_list)
+            if entity_serializer.is_valid():
+                entity_annotation_list = entity_serializer.save()
+            else:
+                print('entity data is invalid')
+                return False
+
+        pass
+    else:
+        class_name = answer['class']
+        if class_name != '':
+            classification_template = dao.get_classification_template_by_name(class_name, epoch)
+            classification_data = serialize_answer_classification(classification_template, epoch, doc)
+            
+            classification_serializer = ClassificationAnnotationSerializer(data=classification_data)
+            if classification_serializer.is_valid():
+                classification_serializer.save()
+            else:
+                print('classification answer is not valid', classification_data)
+                return False
+    return True
+
+'''
+@description: 序列化答案的实体列表
+@param {type} 
+@return: 
+'''
+def serialize_answer_entity_list(entity_list,project,epoch,doc,event_group_annotation=None):
+    serialize_entity_list = []
+    role = Role.objects.get(name='annotator')
+    for entity in entity_list:
+        entity_dic = {}
+        entity_dic['start_offset'] = entity['start_offset']
+        entity_dic['end_offset'] = entity['end_offset']
+        entity_dic['entity_template'] = dao.get_entity_template_id_by_entity_template_name(project,entity['entity_template'])
+        entity_dic['doc'] = doc.id
+        entity_dic['user'] = epoch.annotator.id
+        entity_dic['role'] = role.id
+        entity_dic['content'] = entity['content']
+        #如果是事件标注，添加事件
+        if event_group_annotation is not None:
+            entity_dic['event_group_annotation'] = event_group_annotation.id
+
+        #如果有standard,应上传standard
+        if 'standard' in entity_dic.keys():
+            entity_dic['standard'] = entity['standard']
+        serialize_entity_list.append(entity_dic)
+    return serialize_entity_list
+
+'''
+@description: 序列化答案的关系
+@param {type} 
+@return: 
+'''
+def serialize_answer_relation_list(relation_list,project,epoch,doc,entity_annotation_list):
+    serialize_answer_relation_list = []
+    role = Role.objects.get(name='annotator')
+    for relation in relation_list:
+        relation_dic = {}
+        relation_dic['user'] = epoch.annotator.id
+        start_entity = entity_annotation_list[relation['start_entity_id']]
+        end_entity = entity_annotation_list[relation['end_entity_id']]
+        relation_dic['start_entity'] = start_entity.id
+        relation_dic['end_entity'] = end_entity.id
+        relation_dic['relation_entity_template'] = dao.get_relation_template_id_by_relation_name_and_entity(project,relation['relation_template'], start_entity, end_entity)
+        
+        relation_dic['role'] = role.id
+        relation_dic['doc'] = doc.id
+        serialize_answer_relation_list.append(relation_dic)
+    return serialize_answer_relation_list
+
+'''
+@description: 解析标准文件
+@param {type} 
+@return: 
+'''
+def resolve_standard_file(files):
+    for f in files.getlist('file'):
+        #迭代文件中的每一行
+        data = f.read()
+        if chardet.detect(data)['encoding'] not in ['utf-8','ascii']:
+            print('error encoding format')
+        else:
+            a = json.loads(data.decode())
+            return a
+            
+
+'''
+@description: 下载标注结果,得到实体标注的结果
+@param {type} 
+@return: 
+'''
+def get_entity_annotation_list(epoch_doc, user, role):
+    doc_entity_annotation = dao.get_entity_annotation_by_doc(epoch_doc,user,role)
+    entity_list = []
+    for index in range(len(doc_entity_annotation)):
+        entity_id = doc_entity_annotation[index].id
+        entity_template_id = doc_entity_annotation[index].entity_template_id
+        the_entity_template = Entity_template.objects.filter(id=entity_template_id)
+        entity_dict = {'id':entity_id,'start_offset':doc_entity_annotation[index].start_offset,'end_offset':doc_entity_annotation[index].end_offset,'content':doc_entity_annotation[index].content,'entity_template':the_entity_template[0].name}
+
+        #查看是否存在standard
+        standard = doc_entity_annotation[index].standard
+        if standard is not None:
+            entity_dict['standard'] = standard.standard_name
+
+        #查看是否存在事件组
+        event_group_annotation = doc_entity_annotation[index].event_group_annotation
+        if event_group_annotation is not None:
+            entity_dict['event_group'] = event_group_annotation.id
+
+        entity_list.append(entity_dict)
+    return entity_list
+
+'''
+@description: 下载标注结果，得到关系的标注结果
+@param {type} 
+@return: 
+'''
+def get_relation_annotation_list(epoch_doc, user, role):
+    doc_relation_annotation = dao.get_relation_annotation_by_doc(epoch_doc,user,role)
+    relation_list = []
+    for index in range(len(doc_relation_annotation)):
+        start_id = doc_relation_annotation[index].start_entity_id
+        end_id = doc_relation_annotation[index].end_entity_id
+        relation_id = doc_relation_annotation[index].relation_entity_template_id
+        relation_entity_template = Relation_entity_template.objects.get(id=relation_id)
+        relation = relation_entity_template.relation
+        
+        relation_dict = {'start_entity_id':start_id,'end_entity_id':end_id,'relation_template':relation.name}
+        relation_list.append(relation_dict)
+    return relation_list
+'''
+@description: 下载标注结果，得到事件的标注结果
+@param {type} 
+@return: 
+'''
+def get_event_group_annotation_list(epoch_doc, user, role):
+    doc_event_group_annotation = dao.get_event_annotation_by_doc(epoch_doc, user, role)
+    event_group_list = []
+    for event_group_annotation in doc_event_group_annotation:
+        dic = {}
+        dic['event_group_annotation_id'] = event_group_annotation.id
+        dic['event_group_template_name'] = event_group_annotation.event_group_template.name
+        event_group_list.append(dic)
+    return event_group_list
+    
+'''
+@description: 下载标注结果，得到分类的标注结果
+@param {type} 
+@return: 
+'''
+def get_classification_annotation_list(epoch_doc, user, role):
+    doc_classification_annotation = dao.get_classification_by_doc(epoch_doc, user, role)
+    name = ''
+    for doc_classification in doc_classification_annotation:
+        name = doc_classification.classification_template.name 
+    return name
+
+'''
+@description: 序列化事件组的答案数据
+@param {type} 
+@return: 
+'''
+def serialize_answer_event_group(event_group_template_name, epoch, doc):
+    print(event_group_template_name, epoch, doc)
+    event_group_dic = {}
+    event_group_template = dao.get_event_group_template_by_name(event_group_template_name, epoch)
+    role = Role.objects.get(name='annotator')
+    event_group_dic['doc'] = doc.id
+    event_group_dic['user'] = epoch.annotator.id
+    event_group_dic['role'] = role.id
+    event_group_dic['event_group_template'] = event_group_template.id
+    return event_group_dic
+
+'''
+@description: 序列化分类的答案数据
+@param {type} 
+@return: 
+'''
+def serialize_answer_classification(classification_template, epoch, doc):
+    classification_dic = {}
+    role = Role.objects.get(name='annotator')
+    classification_dic['doc'] = doc.id
+    classification_dic['user'] = epoch.annotator.id
+    classification_dic['role'] = role.id
+    classification_dic['classification_template'] = classification_template.id
+    return classification_dic
+
+'''
+@description: 输入实体模板,查询实体模板下是否存在standard_name的标准
+@param {type} 
+@return: 
+'''
+def has_standard_template_by_standard_name(entity_template, standard_name):
+    standard = entity_template.standard.filter(standard_name=standard_name)
+    return standard
+
+'''
+@description: 字典匹配,返回结果
+@param {type} 
+@return: 
+'''
+def dic_match(doc, dic_queryset, entity_template):
+    content = doc.content
+    entity_template_id = entity_template.id
+
+    dic_dict = {}
+    #把dic_queryset变成字典形式,key是字典名称,value也是dic
+    for dic_item in dic_queryset:
+        dic_content = dic_item.content
+        standard = dic_item.standard
+        dic_dict[dic_content] = standard
+
+    dic_list = list(dic_dict.keys())
+
+    #dic按照长度排序
+    i,j = 0,0
+    for i in range(len(dic_list)):
+        temp_dic = dic_list[i]
+        for j in range(i, -1, -1):
+            if len(dic_list[j - 1]) < len(temp_dic):
+                dic_list[j] = dic_list[j - 1]
+            else:
+                break
+        dic_list[j] = temp_dic   
+
+    match_list = []
+    for dic in dic_list:
+        #可能dic里面存在 正则符号,先转义再用finditer
+        transfered_dic = transfer_dic(dic)
+        re_result_list = re.finditer(transfered_dic, content)
+        for re_result in re_result_list:
+            start_offset, end_offset = re_result.span()
+
+            #判断这个匹配结果和之前匹配结果是否存在重叠
+            flag = True
+            for match in match_list:
+                ms = match['start_offset']
+                me = match['end_offset']
+                if start_offset >= me or end_offset < ms:
+                    pass
+                else:
+                    flag = False
+                    break
+            #如果没有重叠则添加
+            if flag:
+                match_data = {'doc':doc.id, 'content':dic, "start_offset":start_offset, 'end_offset':end_offset, 'entity_template':entity_template_id, 'project':doc.project.id}
+                if dic_dict[dic] is None:
+                    match_data['standard'] = ''
+                else:
+                    match_data['standard'] = dic_dict[dic].id
+                match_list.append(match_data)
+    return match_list
+                
+'''
+@description: 发现dic中的正则字符并转义
+@param {type} 
+@return: 
+'''
+def transfer_dic(dic):
+    re_s = '* . ? + $ ^ [ ] ( ) { } | \ /'
+    re_list = re_s.split()
+    transferd_dic = ''
+    for d in dic:
+        if d in re_list:
+            transferd_dic += '\\' + d
+        else:
+            transferd_dic += d
+    return transferd_dic
+
+'''
+@description: 处理上传的正则文件,转化成serialized_data
+@param {type} 
+@return: 
+'''
+def validate_re(file_list, project):
+    re_list = []
+    #得到project下所有的queryset
+    entity_template_query_set = dao.get_entity_template_by_project(project)
+
+    #如果为空直接返回494
+    if len(entity_template_query_set) == 0:
+        return return_Response('error','the template of this project does not have any entity template',status.HTTP_404_NOT_FOUND)
+        
+    for f in file_list.getlist('file'):
+        df = pd.read_excel(f)
+        for index, row in df.iterrows():
+            content = row['content']
+            entity_name_list = row['entity_name'].split(',')
+            #正确情况是 括号组数量=实体类型数量或者括号数量为0,实体类型数量为1, 其他都是错误情况
+            bracket_number = validate_bracket_number(content)
+            if not((bracket_number == len(entity_name_list)) or (bracket_number == 0 and len(entity_name_list) == 1)):
+                return return_Response('error','the number of bracket is not equal to the number of entity_template',status.HTTP_404_NOT_FOUND)
+
+            re_dict = validate_re_data(content, entity_name_list, project)
+            re_list.append(re_dict)
+    return re_list
+
+
+'''
+@description: 验证re的数据格式
+@param {type} 
+@return: 
+'''
+def validate_re_data(content, entity_name_list, project):
+    re_dict = {}
+    re_dict['project'] = project.id
+    re_dict['content'] = content
+
+    #得到project下所有的queryset
+    entity_template_query_set = dao.get_entity_template_by_project(project)
+
+    entity_template_list = []
+    for entity_name in entity_name_list:
+        entity_template = has_entity_template_by_entity_name(entity_template_query_set,entity_name)
+        entity_template_list.append(entity_template)
+    #如果没找到就读下一行, 如果有查看标准是否存在
+    if entity_template is None:
+        return return_Response('error', 'no entity_template called ' + entity_name, status.HTTP_400_BAD_REQUEST)
+    
+    re_dict['entity_template_list'] = [x.id for x in entity_template_list]
+    return re_dict
+
+
+'''
+@description: re匹配doc并返回正确答案
+@param {type} 
+@return: 
+'''
+def re_match(doc, project, re_, entity_template_list):
+    #最终返回的结果
+    match_list = []
+
+    doc_content = doc.content
+    pattern = re_.content
+    
+    #finditer匹配
+    result = re.finditer(pattern, doc_content)
+
+    for item in result:
+        #先得到匹配上的全文
+        match_content =item.group()
+        match_start, match_end = item.span()
+        #有可能它正则里面没有括号,match_content就是匹配上的文字
+        if len(item.groups()) == 0:
+            #groups为零却匹配上说明整个正则属于没括号的，且只有一个entity_template
+            entity_template = entity_template_list[0]
+            match_data = {}
+            match_data['project'] = project.id
+            match_data['doc'] = doc.id
+            match_data['content'] = match_content
+            match_data['start_offset'] = match_start
+            match_data['end_offset'] = match_end
+            match_data['entity_template'] = entity_template['entity_template']
+            match_list.append(match_data)
+        else:
+            #如果有多组匹配上，看是否和entity_template_list的长度相等
+            if len(item.groups()) != len(entity_template_list):
+                continue
+            for group,entity_template in zip(item.groups(), entity_template_list):
+                #对于多个括号，如果某个括号对应位置为空，匹配结果为None应跳过
+                if group is not None:
+                    match_data ={}
+                    #找到group再当前match_content的index，进而得到再全文中的span
+                    group_index = match_content.index(group)
+                    group_start = match_start + group_index
+                    group_end = group_start + len(group)
+                    match_data['doc'] = doc.id
+                    match_data['project'] = project.id
+                    match_data['content'] = group
+                    match_data['start_offset'] = group_start
+                    match_data['end_offset'] = group_end
+                    match_data['entity_template'] = entity_template['entity_template']
+                    match_list.append(match_data)
+    return match_list
+
+'''
+@description: 判断正则内容中括号的个数
+@param {type} 
+@return: 
+'''
+def validate_bracket_number(pattern):
+    brakect_pattern = '\(.*?\)'
+    brakect_result = re.findall(brakect_pattern, pattern)
+    return len(brakect_result)
+    
+'''
+@description: 存正则以及和entity_template的数据,因为是manytomany,需要分开存储
+@param {type} 
+@return: 
+'''
+def save_re_and_entity_template(serialize_re_data):
+    save_data_list = []
+    #保存成功存储的data_list,并返回给前台
+    for re_data in serialize_re_data:
+        entity_template_list = re_data.pop('entity_template_list')
+        serializer = ReSerializer(data=re_data)
+        if serializer.is_valid():
+            # try:
+            #加一个事务
+            with transaction.atomic():
+                #加一个存储的事务锁
+                re_ = serializer.save()
+                #添加该re和entity_template的关系
+                re_data['entity_template_list'] = []
+                save_data = update_re_entity_template(re_, entity_template_list, re_data)
+                if isinstance(save_data, bool):
+                    return return_Response('error','invalid data!',status.HTTP_400_BAD_REQUEST)
+                else:
+                    save_data_list.append(save_data)
+            # except Exception as e:
+            #     return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
+        else:
+            print(re_data)
+            return return_Response('error','invalid re data!',status.HTTP_400_BAD_REQUEST)
+    
+    return save_data_list
+
+'''
+@description: 给正则表达式添加entity_tempalte
+@param {type} 
+@return: 
+'''
+def update_re_entity_template(re_, entity_template_list, save_data):
+    print(re_)
+    for index,entity_template_id in enumerate(entity_template_list):
+        entity_template = Entity_template.objects.get(pk=entity_template_id)
+        re_entity_tempalte_serialize_data = {}
+        re_entity_tempalte_serialize_data['re'] = re_.id
+        re_entity_tempalte_serialize_data['entity_template'] = entity_template.id
+        re_entity_tempalte_serialize_data['order'] = index + 1
+
+        re_entity_template_serializer = ReEntityTemplateSerializer(data=re_entity_tempalte_serialize_data)
+
+        if re_entity_template_serializer.is_valid():
+            print('re_entity_template data is valid')
+            re_entity_template_serializer.save()
+        else:
+            print('invalid' + str(re_entity_tempalte_serialize_data))
+            print(re_entity_template_serializer.errors)
+            return False
+
+
+        #每成功一个添加entity_template的信息
+        save_data['entity_template_list'].append({'entity_template_id':entity_template.id, 'entity_template_name':entity_template.name, 'order':index+1})
+    return save_data

@@ -1,13 +1,8 @@
 '''
 @Author: meloming
 @Date: 2019-12-22 04:19:00
-<<<<<<< HEAD
-@LastEditTime: 2020-03-04 21:03:18
+@LastEditTime: 2020-05-10 02:40:39
 @LastEditors: Please set LastEditors
-=======
-@LastEditTime : 2020-01-03 02:16:36
-@LastEditors  : Please set LastEditors
->>>>>>> 4db9a43a35352092df80178a27ac7553373b9664
 @Description: Serilizers
 @FilePath: /ecust_annotation/api/serializer.py
 '''
@@ -150,7 +145,49 @@ class DocSerializer(serializers.ModelSerializer):
 class DicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dic
-        fields = ['id','project','content','create_date','content','entity_template']
+        fields = ['id','project','content','create_date','entity_template','standard']
+
+'''
+@description: 正则表的serializer
+@param {type} 
+@return: 
+'''
+class ReSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Re
+        fields = ['id','project','content','create_date']
+
+        
+'''
+@description: 正则表达式和实体类型多对多表的serializer
+@param {type} 
+@return: 
+'''
+class ReEntityTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Re_entity_template
+        fields = ['id', 're', 'entity_template', 'order']
+
+'''
+@description: 标准表的serializer
+@param {type} 
+@return: 
+'''
+class StandardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Standard
+        fields = ['id','project','standard_name','entity_template','create_date']     
+
+'''
+@description: 用户的serializer
+@param {type} 
+@return: 
+'''
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username']   
 
 
 '''
@@ -218,17 +255,17 @@ class EpochSerializer(DynamicFieldsModelSerializer):
 @param {type} 
 @return: 
 '''
-class EntityAnnotationSerializer(DynamicFieldsModelSerializer):
+class EntityAnnotationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Entity_annotation
-        fields = ['id','doc','start_offset','end_offset','content','entity_template','user','role','event_group_annotation']
+        fields = ['id','doc','start_offset','end_offset','content','entity_template','user','role','event_group_annotation','standard']
 
 '''
 @description: 关系标注的serializer，Relation这个
 @param {type} 
 @return: 
 '''       
-class RelationAnnotationSerializer(DynamicFieldsModelSerializer):
+class RelationAnnotationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Relation_annotation
         fields = ['id','doc','user','role','relation_entity_template','start_entity','end_entity']
@@ -238,7 +275,7 @@ class RelationAnnotationSerializer(DynamicFieldsModelSerializer):
 @param {type} 
 @return: 
 '''
-class EventAnnotationSerializer(DynamicFieldsModelSerializer):
+class EventAnnotationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event_group_annotation
         fields = ['id','doc','user','role','event_group_template']
@@ -248,7 +285,7 @@ class EventAnnotationSerializer(DynamicFieldsModelSerializer):
 @param {type} 
 @return: 
 '''
-class ClassificationAnnotationSerializer(DynamicFieldsModelSerializer):
+class ClassificationAnnotationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classification_annotation
         fields = ['id','doc','user','role','classification_template']

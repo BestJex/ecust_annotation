@@ -1,7 +1,7 @@
 '''
 @Author: liangming
 @Date: 2019-12-27 00:27:40
-@LastEditTime: 2020-03-04 07:24:52
+@LastEditTime: 2020-05-10 02:14:59
 @LastEditors: Please set LastEditors
 @Description: 复杂查询接口
 @FilePath: /ecust_annotation/api/dao.py
@@ -9,18 +9,22 @@
 from api.models import *
 from django.db.models.query import QuerySet
 
+
 '''
 @description: 根据project得到对应template的entity_template
 @param {type} 
 @return: 
 '''
 def get_entity_template_by_project(project):
-    entity_template_query_set = project.template.entity_group_template.all()
+    #首先得到project的type
+    project_type = get_project_type_by_project(project)
+    entity_template_query_set = project.template.entity_group_template.all() if project_type != 'EVENT' else project.template.event_group_template.all()
     entity_template = None
 
-    for entity_group in entity_template_query_set:
-        entity_template = entity_group.entity_template.all() if entity_template is None else entity_template.union(entity_group.entity_template.all(),all=True)
-        
+    if project_type == 'EVENT':
+        entity_template = Entity_template.objects.filter(event_group_template__in=entity_template_query_set)
+    else:
+        entity_template = Entity_template.objects.filter(entity_group_template__in=entity_template_query_set)
     return entity_template
 
 
@@ -105,6 +109,19 @@ def get_review_allocation_by_epoch(epoch):
 '''
 def get_epoch_by_project(project):
     return project.epoch
+
+'''
+@description: 得到annotator在project下的epoch
+@param {type} 
+@return: 
+'''
+def get_epoch_by_project_and_annotator(project, annotator):
+    project_epoch = project.epoch.all()
+    annotation_epoch = []
+    for epoch in project_epoch:
+        if epoch.annotator == annotator:
+            annotation_epoch.append(epoch)
+    return annotation_epoch
 
 '''
 @description: 查询annotator的所有epoch,排除undo状态的
@@ -336,3 +353,146 @@ def get_reviewer_epoch_doc(epoch):
 '''
 def get_project_type_by_doc(doc):
     return doc.project.template.template_type
+
+
+'''
+@description: 得到project的所有doc 
+@param {type} 
+@return: 
+'''
+def get_doc_by_project(project):
+    return project.doc.all()
+
+'''
+@description: 根据entity_template_name和project得到entity_template的id
+@param {type} 
+@return: 
+'''
+def get_entity_template_id_by_entity_template_name(project,entity_template_name):
+    project_entity_template_list = get_entity_template_by_project(project)
+    for entity_template in project_entity_template_list:
+        if entity_template.name == entity_template_name:
+            return entity_template.id
+    
+'''
+@description: 根据project和relation_template_name,以及头尾实体的类型查询relation_template_id
+@param {type} 
+@return: 
+'''
+def get_relation_template_id_by_relation_name_and_entity(project,relation_template_name, start_entity, end_entity):
+    start_entity_template = start_entity.entity_template
+    end_entity_template = end_entity.entity_template
+    relation_template_list = project.template.relation_template.all()
+    relation_template = relation_template_list.get(name=relation_template_name)
+    print(start_entity_template, end_entity_template)
+    return Relation_entity_template.objects.filter(start_entity=start_entity_template).filter(end_entity=end_entity_template).filter(relation=relation_template)[0].id
+'''
+@description: 根据entity_template的id查询其对应的所有standard
+@param {type} 
+@return: 
+'''
+def get_standard_by_entity_template_id(entity_template_id, project_id):
+    entity_template = Entity_template.objects.get(pk=entity_template_id)
+    project = Project.objects.get(pk=project_id)
+    return Standard.objects.filter(entity_template=entity_template).filter(project=project)
+
+'''
+@description: 根据role_id查询user_list
+@param {type} 
+@return: 
+'''
+def get_user_list_by_role_id(role_id):
+    role = Role.objects.get(pk=role_id)
+    user_list = User.objects.filter(role=role)
+    return user_list
+
+'''
+@description: 获取project的标注类型
+@param {type} 
+@return: 
+'''
+def get_project_type_by_project(project):
+    return project.template.template_type
+
+'''
+@description: 输入doc,获得doc的annotator
+@param {type} 
+@return: 
+'''
+def get_annotator_by_doc(doc):
+    return doc.epoch.all()[0].annotator
+
+'''
+@description: 根据事件组的名称查询事件
+@param {type} 
+@return: 
+'''
+def get_event_group_template_by_name(event_group_template_name, epoch):
+    #先查询这个epoch下的所有event_group_tempalt
+    template = epoch.project.template
+    event_group_queryset = template.event_group_template
+    return event_group_queryset.get(name=event_group_template_name)
+
+'''
+@description: 选择出epoch下的classification_template
+@param {type} 
+@return: 
+'''
+def get_classification_template_by_name(class_name, epoch):
+    template = epoch.project.template
+    classification_template_queryset = template.classification_template 
+    return classification_template_queryset.get(name=class_name)
+
+'''
+@description: 根据实体模板查询实体对应的实体组
+@param {type} 
+@return: 
+'''
+def get_entity_group_template_by_entity_template(entity_template_id):
+    entity_template = Entity_template.objects.get(pk=entity_template_id)
+    return entity_template.entity_group_template
+
+'''
+@description: 根据实体查询对应的事件组
+@param {type} 
+@return: 
+'''
+def get_event_group_template_by_entity_template(entity_template_id):
+    entity_template = Entity_template.objects.get(pk=entity_template_id)
+    return entity_template.event_group_template
+
+'''
+@description: 查询project下某entity_template的dic
+@param {type} 
+@return: 
+'''
+def get_dic_by_entity_template_and_project(entity_template, project):
+    return Dic.objects.filter(entity_template=entity_template).filter(project=project).all()
+
+
+'''
+@description: 返回project下哪些实体类型有字典内容
+@param {type} 
+@return: 
+'''
+def get_project_dic_entity_template(project):
+    entity_template_set = project.dic.all().values('entity_template').distinct()
+    return Entity_template.objects.filter(id__in=entity_template_set)
+
+'''
+@description: 返回project所有的正则表达式
+@param {type} 
+@return: 
+'''
+def get_re_by_project(project):
+    re_queryset = Re.objects.filter(project=project)
+    # return re_queryset
+    return Re_entity_template.objects.filter(re__in=re_queryset).order_by('re','order')
+
+'''
+@description: 查询re的entity_tempalte并按照排序返回
+@param {type} 
+@return: 
+'''
+def get_re_entity_template_by_order(re_):
+    return Re_entity_template.objects.filter(re=re_).order_by('order').values('entity_template')

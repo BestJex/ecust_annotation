@@ -1,7 +1,7 @@
 '''
 @Author: your name
 @Date: 2019-12-22 04:32:38
-@LastEditTime: 2020-03-04 20:50:30
+@LastEditTime: 2020-05-10 06:50:32
 @LastEditors: Please set LastEditors
 @Description: In User Settings Edit
 @FilePath: /ecust_annotation/api/views.py
@@ -168,7 +168,6 @@ class EntityTemplateList(generics.ListCreateAPIView):
 
     #创建实体组或者事件组下的实体
     def create(self,request, *args, **kwargs):
-        print('you in wrong place your mother fucker')
         #根据上传的data是否为list决定实例化serializer是many是否为True
         many = isinstance(self.request.data,list)
         #将实体组和事件组信息加入data中
@@ -218,7 +217,6 @@ class RelationEntityList(generics.ListCreateAPIView):
 
     #创建某关系下的所有实体模板对
     def create(self,request, *args, **kwargs):
-        print('fuckyou')
         #根据上传的data是否为list决定实例化serializer是many是否为True
         many = isinstance(self.request.data,list)
 
@@ -285,6 +283,7 @@ class ProjectList(generics.ListCreateAPIView):
     queryset = Project.objects.filter(in_use=1)
     serializer_class = ProjectSerializer
 
+
 '''
 @description: 查询任务详情，更新某一任务的in_use
 @param {type} 
@@ -310,9 +309,10 @@ class ProjectDoc(APIView):
         except:
             return utils.return_Response('errors','project not found',status.HTTP_404_NOT_FOUND)
 
-        ann_num_per_epoch = request.data['ann_num_per_epoch']
-        #验证文件格式的准确性，以及ann_num_per_epoch的合法性
-        docs = utils.validate_files(request.FILES,ann_num_per_epoch)
+        
+        #验证文件格式的准确性，令ann_num_per_epoch等于文件长度，变成1个epoch
+        docs = utils.validate_files(request.FILES)
+        ann_num_per_epoch = len(docs)
 
         if isinstance(docs,Response):
             return docs
@@ -339,19 +339,167 @@ class ProjectDoc(APIView):
 @return: 
 '''       
 class ProjectDic(APIView):
+    #手动方式和文件方式上传字典
     def post(self,request,*args, **kwargs):
+        upload_type = self.request.data['type']
         project_id = self.kwargs['projectid']
+        project = get_object_or_404(Project, pk=project_id)
 
         #对于上传的dic文件做验证，如果成功返回serialize好的data，如果出错返回Respone类型
-        serialized_dic_data = utils.validate_dic(request.FILES['file'],project_id)
-        if isinstance(serialized_dic_data,Response):
-            return serialized_dic_data
+        if upload_type == 'file':
+            serialized_dic_data = utils.validate_dic(request.FILES,project)
+            if isinstance(serialized_dic_data,Response):
+                return serialized_dic_data
 
+        elif upload_type == 'manual':
+            data = self.request.data['data']
+            content, entity_template_id, standard_id = data.split(',')
+            entity_template_id = int(entity_template_id)
+            standard_id = int(standard_id)
+            serialized_dic_data = {'content':content, 'project':project_id, 'entity_template':entity_template_id, 'standard':standard_id}
+            print(serialized_dic_data)
+            if isinstance(serialized_dic_data,Response):
+                return serialized_dic_data
+        else:
+            return utils.return_Response('errro', 'invalid upload type', status.HTTP_400_BAD_REQUEST)
+            
+        serialized_dic_data = [serialized_dic_data] if isinstance(serialized_dic_data, dict) else serialized_dic_data
         serializer = DicSerializer(data=serialized_dic_data,many=True)
-        serializer.is_valid()
-        serializer.save()
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            return utils.return_Response('error','invalid data!',status.HTTP_400_BAD_REQUEST)
 
-        return utils.return_Response('message','create successfully!',status.HTTP_201_CREATED)
+        return Response(serialized_dic_data, status.HTTP_201_CREATED)
+
+    #返回该任务所属字典下有那些entity_template
+    def get(self,request,*args, **kwargs):
+        project_id = self.kwargs['projectid']
+        project = get_object_or_404(Project, pk=project_id)
+
+        entity_template_queryset = dao.get_project_dic_entity_template(project)
+        serialized_entity_template_data = EntityTemplateSerializer(entity_template_queryset,many=True).data
+        
+        return Response(serialized_entity_template_data, status.HTTP_200_OK)
+
+'''
+@description: 上传正则，查询正则
+@param {type} 
+@return: 
+'''  
+class ProjectRe(APIView):
+    #通过文件和手动方式上传正则
+    def post(self,request,*args, **kwargs):
+        upload_type = self.request.data['type']
+        project_id = self.kwargs['projectid']
+        project = get_object_or_404(Project, pk=project_id)
+
+        if upload_type == 'file':
+            serialize_re_data = utils.validate_re(request.FILES, project)
+            if isinstance(serialize_re_data,Response):
+                return serialize_re_data
+        elif upload_type == 'manual':
+            content = self.request.data['content']
+            entity_template_id_list = self.request.data['entity_template_id_list'].split(',')
+            entity_template_id_list = [int(x) for x in entity_template_id_list]
+            #验证括号长度
+            bracket_number = utils.validate_bracket_number(content)
+            if not((bracket_number == len(entity_template_id_list)) or (bracket_number == 0 and len(entity_template_id_list) == 1)):
+                print(bracket_number, len(entity_template_id_list))
+                return utils.return_Response('error','the number of bracket is not equal to the number of entity_template',status.HTTP_404_NOT_FOUND)
+
+            serialize_re_data = [{'content':content, 'project':project_id, 'entity_template_list':entity_template_id_list}]
+        else:
+            return utils.Response('error', 'not valid upload type', status.HTTP_400_BAD_REQUEST)
+
+        save_result = utils.save_re_and_entity_template(serialize_re_data)
+
+        if isinstance(save_result, Response):
+            return save_result
+
+        return Response(save_result, status.HTTP_201_CREATED)
+
+    #查询某任务下某实体类型下的正则表达式
+    def get(self,request,*args, **kwargs):
+        project_id = self.kwargs['projectid']
+        project = get_object_or_404(Project, pk=project_id)
+        re_queryset = dao.get_re_by_project(project)
+        serialize = ReEntityTemplateSerializer(re_queryset, many=True)
+
+        #手动和并每个正则
+        return_data = {}
+        print(serialize.data)
+        for item in serialize.data:
+            re_id = item['re']
+            entity_template_id = item['entity_template']
+            re_obj = get_object_or_404(Re, pk=re_id)
+            entity_template_obj = get_object_or_404(Entity_template, pk=entity_template_id)
+            re_data = ReSerializer(re_obj).data
+            entity_template_data = EntityTemplateSerializer(entity_template_obj).data
+            if re_id not in return_data:
+                
+                return_data[re_id] = {'re':re_data}
+                return_data[re_id]['entity_template_list'] = [entity_template_data]
+            else:
+                return_data[re_id]['entity_template_list'].append(entity_template_data)
+
+        return Response(list(return_data.values()), status.HTTP_200_OK)
+        
+'''
+@description: 某条文本的正则匹配，每次匹配一种正则
+@param {type} 
+@return: 
+''' 
+class ProjectReMatch(APIView):
+    def post(self, request, *args, **kwargs):
+        doc_id = int(self.request.data['doc_id'])
+        re_id = int(self.request.data['re_id'])
+
+        doc = get_object_or_404(Doc, pk=doc_id)
+        project = doc.project
+
+        re_ = get_object_or_404(Re, pk=re_id)
+
+        #验证下一致性
+        if re_.project != doc.project:
+            return Response({'error':'this doc and re not match'}, status.HTTP_400_BAD_REQUEST)
+        
+        #查询返回的queryset内对象并不是entity_template的object，而是一个只包含id的dict，因为用了values
+        entity_template_list = dao.get_re_entity_template_by_order(re_)
+
+        match_list = utils.re_match(doc, project, re_, entity_template_list)
+
+        return Response(match_list, status.HTTP_200_OK)
+        
+
+'''
+@description: 在某条文本处采用字典匹配，且只选择 某一实体模板的 字典（例如只匹配地点的字典）
+@param {type} 
+@return: 
+'''   
+class ProjectDicMatch(APIView):
+    def post(self, request, *args, **kwargs):
+        doc_id = int(self.request.data['doc_id'])
+        entity_template_id = int(self.request.data['entity_template_id'])
+        print(doc_id, entity_template_id)
+        doc = get_object_or_404(Doc, pk=doc_id)
+        project = doc.project
+        entity_template = get_object_or_404(Entity_template, pk=entity_template_id) 
+
+        #验证下一致性
+        project_entity_template = dao.get_entity_template_by_project(project)
+        project_entity_template = project_entity_template.all()
+        if entity_template not in project_entity_template:
+            return utils.return_Response('error', 'project, doc and entity_template is not consist!', status.HTTP_400_BAD_REQUEST)       
+
+        #获取该实体类型下的所有字典
+        dic_queryset = dao.get_dic_by_entity_template_and_project(entity_template, project)
+        
+        #匹配返回结果list
+        match_list = utils.dic_match(doc, dic_queryset, entity_template)
+
+        return Response(match_list, status.HTTP_200_OK)
+
 
 '''
 @description: 任务epoches的创建和对应进度查询
@@ -375,12 +523,15 @@ class ProjectEpoch(APIView):
 
         return Response(merge_data,status=status.HTTP_200_OK)
 
-    #post请求用于确定epoch的分配和ann_allocation以及review_allocation的创建
+    #post请求用于确定epoch的分配和ann_allocation以及review_allocation的创建,如果用户上传了答案，则将答案写入库中
     def post(self,request,*args, **kwargs):
         #epoch表的分配
         project_id = self.kwargs['projectid']
-        annotators_id = request.data['annotators']
-        reviewers_id = request.data['reviewers']
+        annotators_id = [int(x) for x in request.data['annotators'].split(',')]
+        reviewers_id = [int(x) for x in request.data['reviewers'].split(',')]
+        answer_file = request.FILES
+        # print(list(annotators_id),type(annotators_id))
+        answer_list = utils.resolve_answer_file(answer_file)
 
         validate_data = self.validate(project_id,annotators_id,reviewers_id)
         if isinstance(validate_data,Response):
@@ -404,7 +555,7 @@ class ProjectEpoch(APIView):
                 #如果是主动学习，待分配的epoch数为1，其他为total_epoches
                 total_allocate_epoch = 1 if project.project_type == 'ACTIVE_LEARNING' else total_epoches        
                 #ann_allocation的分配,review_allocation的分配
-                utils.get_annotation_review_allocation(project,total_allocate_epoch,annotators,reviewers)
+                utils.get_annotation_review_allocation(project,total_allocate_epoch,annotators,reviewers,answer_list)
         except Exception as e:
             return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
         
@@ -417,6 +568,7 @@ class ProjectEpoch(APIView):
 
         annotators = User.objects.filter(pk__in=annotators_id)
         reviewers = User.objects.filter(pk__in=reviewers_id)
+        print(annotators, reviewers)
 
         #验证annotators和reviewers的身份
         annotator_role = get_object_or_404(Role,name='annotator')
@@ -429,7 +581,7 @@ class ProjectEpoch(APIView):
                 return utils.return_Response('errors','invalid reviewer of id = {}'.format(reviewer.id),status.HTTP_404_NOT_FOUND)
         if len(annotators) != len(annotators_id) or len(reviewers) != len(reviewers_id):
             return utils.return_Response('errors','has invalid user id',status.HTTP_404_NOT_FOUND)
-
+        
         return [project,annotators,reviewers]
 
 '''
@@ -443,9 +595,9 @@ class AnnotatorEpoch(generics.ListAPIView):
         annotator_id = self.kwargs['annotatorid']
         annotator = get_object_or_404(User,pk=annotator_id)
 
-        #判断是否存在标注者身份
-        if not utils.is_annotator(annotator):
-            return utils.return_Response('errors','no annotator with pk = {}'.format(annotator_id),status.HTTP_404_NOT_FOUND)
+        # #判断是否存在标注者身份
+        # if not utils.is_annotator(annotator):
+        #     return utils.return_Response('errors','no annotator with pk = {}'.format(annotator_id),status.HTTP_404_NOT_FOUND)
 
         #查询该user所有epoch
         epoches = dao.get_epoch_by_annotator(annotator)
@@ -501,6 +653,7 @@ class EpochDoc(generics.ListAPIView):
     def get_queryset(self):
         epoch_id = self.kwargs['epochid']
         epoch = get_object_or_404(Epoch,pk=epoch_id)
+        print(epoch.doc.all())
         return epoch.doc.all()
         
 
@@ -509,8 +662,44 @@ class EpochDoc(generics.ListAPIView):
 @param {type} 
 @return: 
 '''
-class AnnotationEntity(generics.CreateAPIView):
+class AnnotationEntity(generics.ListCreateAPIView):
     serializer_class = EntityAnnotationSerializer
+
+    #由于perform_create执行时已经获取了serializer，这里重写create方法
+    def create(self,request, *args, **kwargs):
+        #根据上传的data是否为list决定实例化serializer是many是否为True
+        many = isinstance(self.request.data,list)
+
+        validate_result = self.validate_entity_annotation()
+        if validate_result is not None:
+            return validate_result
+
+        serializer = self.serializer_class(data=request.data,many=many)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def validate_entity_annotation(self):
+        #如果是事件标注,event_group_annotation不能为null
+        doc_id = self.kwargs['docid']
+        doc = get_object_or_404(Doc, pk=doc_id)
+        project_type = doc.project.template.template_type
+        if project_type == 'EVENT':
+            data = self.request.data
+            data = [data] if isinstance(data, dict) else data
+            for item in data:
+                if 'event_group_annotation' not in item or item['event_group_annotation'] == 'null':
+                    return Response('event_group_annotation not found!', status.HTTP_400_BAC_REQUEST)
+'''
+@description: 删除一个doc下的entity标注
+@param {type} 
+@return: 
+'''
+class AnnotationEntityDelete(generics.DestroyAPIView):
+    serializer_class = EntityAnnotationSerializer
+    queryset = Entity_annotation
+    lookup_url_kwarg = 'entityid'
 
 '''
 @description: 创建一个关系标注，RE时会用
@@ -521,6 +710,16 @@ class AnnotationRelation(generics.CreateAPIView):
     serializer_class = RelationAnnotationSerializer
 
 '''
+@description: 删除doc下的关系标注
+@param {type} 
+@return: 
+'''
+class AnnotationRelationDelete(generics.DestroyAPIView):
+    serializer_class = RelationAnnotationSerializer
+    queryset = Relation_annotation
+    lookup_url_kwarg = 'relationid'
+
+'''
 @description: 创建一个事件标注
 @param {type} 
 @return: 
@@ -529,12 +728,32 @@ class AnnotationEvent(generics.CreateAPIView):
     serializer_class = EventAnnotationSerializer
 
 '''
+@description: 删除事件组标注
+@param {type} 
+@return: 
+'''
+class AnnotationEventDelete(generics.DestroyAPIView):
+    serializer_class = EventAnnotationSerializer
+    queryset = Event_group_annotation
+    lookup_url_kwarg = 'eventid'
+
+'''
 @description: 创建一个分类标注
 @param {type} 
 @return: 
 '''
 class AnotationClassification(generics.CreateAPIView):
     serializer_class = ClassificationAnnotationSerializer
+
+'''
+@description: 删除分类标注
+@param {type} 
+@return: 
+'''
+class AnotationClassificationDelete(generics.DestroyAPIView):
+    serializer_class = ClassificationAnnotationSerializer
+    queryset = Classification_annotation
+    lookup_url_kwarg = 'classificationid'
 
 '''
 @description: 查看某一个doc的标注结果
@@ -587,47 +806,106 @@ class AnnotationConfirmation(generics.CreateAPIView):
         annotation_allocation = dao.get_annotation_allocation_by_doc_user(doc,user)
         dao.update_annotation_allocation_state(annotation_allocation,'WAITING')
         
-        #检测当前user在当前epoch是否全部标注完成
-        if utils.has_user_finish_epoch(doc,user,role):
-            #查询该doc该user该role下的epoch
-            annotator_epoch = dao.get_epoch_of_annotator_by_doc(doc,user,role)
+        # #检测当前user在当前epoch是否全部标注完成
+        # if utils.has_user_finish_epoch(doc,user,role):
+        #     #查询该doc该user该role下的epoch
+        #     annotator_epoch = dao.get_epoch_of_annotator_by_doc(doc,user,role)
 
-            #改变当前epoch的状态
-            dao.update_epoch_state(annotator_epoch,'WAITING')
+        #     #改变当前epoch的状态
+        #     dao.update_epoch_state(annotator_epoch,'WAITING')
 
-            #判断该epoch所有的user是否都完成标注
-            if utils.has_finish_epoch(doc,user,role):
-                waiting_epoch = dao.get_waiting_epoch(doc)
+        #     #判断该epoch所有的user是否都完成标注
+        #     if utils.has_finish_epoch(doc,user,role):
+        #         waiting_epoch = dao.get_waiting_epoch(doc)
 
-                #机器进行一致性校验，不通过直接打回重标    
-                consistency_result,consistency_annotation_list = utils.get_consistency_result(doc)
-                #如果consistency_result的长度为0，说明通过一致性校验，可以进入审核阶段
-                if len(consistency_result) == 0:        
-                    dao.update_epoch_state(waiting_epoch,'REVIEWING')
-                    #保存二者的并集标注，以审核者的身份保存
-                    has_saved = utils.save_union_annotations(consistency_annotation_list,annotator_epoch)
+        #         #机器进行一致性校验，不通过直接打回重标    
+        #         consistency_result,consistency_annotation_list = utils.get_consistency_result(doc)
+        #         #如果consistency_result的长度为0，说明通过一致性校验，可以进入审核阶段
+        #         if len(consistency_result) == 0:        
+        #             dao.update_epoch_state(waiting_epoch,'REVIEWING')
+        #             #保存二者的并集标注，以审核者的身份保存
+        #             has_saved = utils.save_union_annotations(consistency_annotation_list,annotator_epoch)
                     
-                    if not has_saved:
-                        return utils.return_Response('error','invalid_deserialize_data',status=status.HTTP_400_BAD_REQUEST)
-                else:
-                    utils.re_annotation(consistency_result)
+        #             if not has_saved:
+        #                 return utils.return_Response('error','invalid_deserialize_data',status=status.HTTP_400_BAD_REQUEST)
+        #         else:
+        #             utils.re_annotation(consistency_result)
 
-                project = dao.get_project_by_doc(doc)
+        #         project = dao.get_project_by_doc(doc)
 
-                #是否为普通任务的最后一个epoch,如果不是则将下一个epoch激活
-                if not dao.is_last_epoch(project,doc):
-                    if project.project_type == 'NON_ACTIVE_LEARNING':
-                        #如果不是ACITVE_LEARNING,则将下一个epoch的state改为ANNOTATING
-                        next_epoch_num = annotator_epoch.num + 1
-                        next_epoches = dao.get_epoch_by_num_and_project(next_epoch_num,project)
-                        dao.update_epoch_state(next_epoches,'ANNOTATING')
+        #         #是否为普通任务的最后一个epoch,如果不是则将下一个epoch激活
+        #         if not dao.is_last_epoch(project,doc):
+        #             if project.project_type == 'NON_ACTIVE_LEARNING':
+        #                 #如果不是ACITVE_LEARNING,则将下一个epoch的state改为ANNOTATING
+        #                 next_epoch_num = annotator_epoch.num + 1
+        #                 next_epoches = dao.get_epoch_by_num_and_project(next_epoch_num,project)
+        #                 dao.update_epoch_state(next_epoches,'ANNOTATING')
                     
-                    if project.project_type == 'ACITVE_LEARNING':
-                        #如果是主动学习，调用接口选择下一个epoch的doc并分配
-                        pass
+        #             if project.project_type == 'ACITVE_LEARNING':
+        #                 #如果是主动学习，调用接口选择下一个epoch的doc并分配
+        #                 pass
 
         return utils.return_Response('message','confirm successfully',status.HTTP_200_OK)
 
+'''
+@description: 根据project,epoch,user,role得到对应一轮的标注结果并传给前端,role是reviewer时为最终标注结果 [lyp]
+@param {project,epoch,user,role} 
+@return: 
+'''
+class AnnotationResult(generics.CreateAPIView):
+    def post(self,request,*args, **kwargs):
+        project_id = self.request.data['project']
+
+        project = get_object_or_404(Project,pk=project_id)
+
+        #获取project的type
+        project_type = dao.get_project_type_by_project(project)
+
+        #获取该project下所有doc
+        project_doc = dao.get_doc_by_project(project)
+        
+        result_list = []
+        
+        #role直接是标注者
+        role = Role.objects.get(pk=2)
+        for epoch_doc in project_doc:
+            #查询每条文本的标注者
+            user = dao.get_annotator_by_doc(epoch_doc)
+
+            if project_type == 'NER':
+                entity_list = utils.get_entity_annotation_list(epoch_doc, user, role)
+                dic = {'doc_content':epoch_doc.content,'entity':entity_list}
+                result_list.append(dic)
+            elif project_type == 'RE':
+                entity_list = utils.get_entity_annotation_list(epoch_doc, user, role)
+                relation_list = utils.get_relation_annotation_list(epoch_doc, user, role)
+                dic = {'doc_content':epoch_doc.content,'entity':entity_list,'relation':relation_list}
+                result_list.append(dic)
+            elif project_type == 'EVENT':
+                entity_list = utils.get_entity_annotation_list(epoch_doc, user, role)
+                event_group_list = utils.get_event_group_annotation_list(epoch_doc, user, role)
+                new_event_group_list = []
+                for event_group in event_group_list:
+                    event_group_dic = {}
+                    event_group_dic['event_group_template'] = event_group['event_group_template_name']
+                    event_group_entity_list = []
+                    for entity in entity_list:
+                        if 'event_group' in entity.keys() and entity['event_group'] == event_group['event_group_annotation_id']:
+                            event_group_entity_list.append(entity)
+                            entity.pop('event_group')
+                    
+                    event_group_dic['entity'] = event_group_entity_list
+                    new_event_group_list.append(event_group_dic)
+                
+                dic = {'doc_content':epoch_doc.content, 'event_group': new_event_group_list}
+                result_list.append(dic)
+                        
+            else:
+                class_name = utils.get_classification_annotation_list(epoch_doc, user, role)
+                dic = {'doc_content':epoch_doc.content, 'class': class_name}
+                result_list.append(dic)    
+                     
+        return utils.return_Response('result_file',result_list,status.HTTP_200_OK)
 
 '''
 @description: 查询user的role
@@ -659,3 +937,119 @@ class ReviewerEpochDoc(generics.ListAPIView):
         epoch_id = self.kwargs['epochid']
         epoch = get_object_or_404(Epoch,pk=epoch_id)
         return dao.get_reviewer_epoch_doc(epoch)
+
+'''
+@description: 创建project下的标准名称表，可通过文件和手动上传两种方式
+@param {type} 
+@return: 
+'''
+class ProjectStandard(generics.ListCreateAPIView):
+    serializer_class = StandardSerializer
+    def post(self, request, *args, **kwargs):
+        project_id = self.kwargs['projectid']
+        project = get_object_or_404(Project,pk=project_id)
+        create_type = self.request.data['type']
+        #根据上传类型获取上传的数据，转成dic返回
+        serialize_data = self._get_upload_data(create_type,project)
+        if not isinstance(serialize_data,list):
+            return serialize_data
+        
+        serializer = self.serializer_class(data=serialize_data,many=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        return utils.return_Response('msg',"upload success!",status.HTTP_200_OK)
+
+    def _get_upload_data(self,create_type,project):
+        #文件上传
+        if create_type == 'file':
+            files = self.request.FILES
+            if len(files) == 0:
+                return utils.return_Response("error","no valid file",status.HTTP_400_BAD_REQUEST)
+            else:
+                data = utils.resolve_standard_file(files)
+                if data is None:
+                    return utils.return_Response("error","using utf-8",status.HTTP_400_BAD_REQUEST)
+        #手动上传
+        else:
+            data =  self.request.data['data']
+
+        serialize_data = []
+        entity_template_queryset = dao.get_entity_template_by_project(project)
+        print(entity_template_queryset)
+
+        for k,v in data.items():
+            #获取entity_template的id
+            try:
+                entity_template = entity_template_queryset.get(name=k)
+            except:
+                return Response('no entity template called ' + k, status.HTTP_400_BAD_REQUEST)
+            print(k, entity_template)
+            for standard_name in v:
+                dic = {}
+                dic['entity_template'] = entity_template.id
+                dic['project'] = project.id
+                dic['standard_name'] = standard_name
+                serialize_data.append(dic)
+
+        return serialize_data                
+
+'''
+@description: 输入entity_template的id，查询对应的standard_name
+@param {type} 
+@return: 
+'''
+class EntityTemplateStandard(generics.ListAPIView):
+    serializer_class = StandardSerializer
+    def get_queryset(self):
+        entity_template_id = self.kwargs['entitytemplateid']
+        project_id = self.kwargs['projectid']
+        return dao.get_standard_by_entity_template_id(entity_template_id, project_id)
+
+'''
+@description: 更新一条实体标注的standard名称
+@param {type} 
+@return: 
+'''
+class AnnotationStandard(generics.UpdateAPIView):
+    def partial_update(self, request, *args, **kwargs):
+        annotation_id = self.kwargs['annotationid']
+        standard_name_id = self.request.data['standard_name_id']
+
+        annotation = get_object_or_404(Entity_annotation,pk=annotation_id)
+        standard = get_object_or_404(Standard,pk=standard_name_id)
+        
+        annotation.standard = standard
+        annotation.save()
+        
+        return utils.return_Response('msg','create standard success!',status.HTTP_200_OK)
+
+class UserList(generics.ListCreateAPIView):
+    serializer_class = UserSerializer
+    
+    def get_queryset(self):
+        role_id = self.request.GET['role_id']
+        return dao.get_user_list_by_role_id(role_id)
+
+    def post(self, request, *args, **kwargs):
+        user_name = self.request.data['user_name']
+        password_word = self.request.data['password']
+        role_list = [int(x) for x in self.request.data['role_list'].split(',')]
+        is_active = True
+
+        try:
+            user = User.objects.create_user(username=user_name, password=password_word, is_active=is_active)
+        except:
+            return utils.return_Response('error', 'this username has existed!', status.HTTP_400_BAD_REQUEST)  # 已经创建，无法重复创建
+
+        #创建user和role的关系
+        if user is not None:
+            for role in role_list:
+                r = get_object_or_404(Role, pk=role)
+                user.role.add(r)
+        
+        return utils.return_Response('msg', 'create successful', status.HTTP_200_OK)
+
+
+
+    
